@@ -1,0 +1,29 @@
+# Web frameworks
+flask
+fastapi
+uvicorn
+jinja2
+
+# Zoom & OAuth
+requests
+python-dotenv
+authlib
+
+# Azure Storage
+azure-storage-blob
+
+# OpenAI
+openai
+
+# Email (Brevo)
+httpx
+
+# PostgreSQL
+psycopg2-binary
+sqlalchemy
+
+# Tools & Utilities
+python-multipart
+pydantic
+aiofiles
+python-dateutil

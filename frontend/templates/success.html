@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Meeting Scheduled</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+      padding: 40px;
+    }
+    .card {
+      background: #ffffff;
+      padding: 30px;
+      max-width: 500px;
+      margin: auto;
+      border-radius: 8px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    h2 {
+      color: #28a745;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border-radius: 5px;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: #0056b3;
+    }
+    .info {
+      text-align: left;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>✅ Meeting Scheduled Successfully!</h2>
+    <div class="info">
+      <p><strong>Meeting ID:</strong> {{ meeting.meeting_id }}</p>
+      <p><strong>Start Time:</strong> {{ meeting.start_time_gst }}</p>
+      <p><strong>Duration:</strong> {{ meeting.duration }} minutes</p>
+    </div>
+    <a class="btn" href="{{ meeting.start_url }}" target="_blank">🔗 Start Meeting</a><br><br>
+    <a class="btn" href="{{ meeting.join_url }}" target="_blank">🔗 Join Meeting</a><br><br>
+    <a href="/" class="btn">⬅️ Schedule Another</a>
+  </div>
+</body>
+</html>

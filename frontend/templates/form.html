@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Schedule a Zoom Meeting</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <div class="card shadow-lg p-4">
+      <h2 class="text-center mb-4">📅 Book a Zoom Meeting</h2>
+      <form method="POST" action="/schedule">
+        <div class="mb-3">
+          <label class="form-label">Meeting Topic</label>
+          <input type="text" class="form-control" name="topic" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Start Time</label>
+          <input type="text" class="form-control datetimepicker" name="start_time" placeholder="Select date and time" required>
+          <small class="text-muted">Timezone: GST (UTC+4)</small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Duration (minutes)</label>
+          <input type="number" class="form-control" name="duration" value="30" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Agenda</label>
+          <textarea class="form-control" name="agenda" rows="3"></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Participants (comma-separated emails)</label>
+          <input type="text" class="form-control" name="participants" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">✅ Schedule Meeting</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    flatpickr(".datetimepicker", {
+      enableTime: true,
+      time_24hr: true,
+      allowInput: true,
+      defaultDate: new Date(),
+      dateFormat: "Z",  // disables default formatting
+      onChange: function(selectedDates, dateStr, instance) {
+        if (!selectedDates.length) return;
+  
+        const selected = selectedDates[0];
+  
+        // Convert to UTC+4 (GST)
+        const gst = new Date(selected.getTime() + (4 * 60 * 60 * 1000));
+        const isoGst = gst.toISOString().split(".")[0] + "Z";
+  
+        // ✅ Completely override the input
+        instance.input.value = isoGst;
+      }
+    });
+  </script>
+  
+  
+  
+</body>
+</html>
