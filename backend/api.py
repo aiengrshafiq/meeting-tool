@@ -4,6 +4,8 @@ from backend.webhook import router as webhook_router
 from common.zoom_api import create_zoom_meeting
 from dotenv import load_dotenv
 import os
+import json
+from pathlib import Path
 
 load_dotenv()
 
@@ -16,6 +18,12 @@ class MeetingRequest(BaseModel):
     duration: int
     agenda: str = ""
     participants: list[str]
+
+def save_participants(meeting_id: str, participants: list[str]):
+    os.makedirs("data", exist_ok=True)
+    path = Path(f"data/participants_{meeting_id}.json")
+    with open(path, "w") as f:
+        json.dump(participants, f)
 
 @app.post("/api/create-meeting")
 def create_meeting(request: MeetingRequest):
@@ -36,6 +44,10 @@ def create_meeting(request: MeetingRequest):
 
     try:
         result = create_zoom_meeting(payload)
+
+        # Save participants
+        save_participants(result["id"], request.participants)
+
         return {
             "meeting_id": result["id"],
             "join_url": result["join_url"],

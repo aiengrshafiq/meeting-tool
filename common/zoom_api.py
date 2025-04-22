@@ -11,6 +11,13 @@ def create_zoom_meeting(payload):
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
+    payload["settings"] = {
+        "auto_recording": "cloud",
+        "join_before_host": True,
+        "mute_upon_entry": True,
+        "approval_type": 0
+    }
+
 
     response = requests.post(
         f"https://api.zoom.us/v2/users/{user_id}/meetings",
