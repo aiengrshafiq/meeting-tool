@@ -16,6 +16,7 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
 
+# Copy nginx and supervisor config properly
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
