@@ -1,28 +1,35 @@
 # Use Python base image
 FROM python:3.11-slim
 
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 # Set working directory
 WORKDIR /app
 
-# Install OS-level dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential curl git supervisor && \
-    rm -rf /var/lib/apt/lists/*
+    build-essential \
+    curl \
+    git \
+    nginx \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy dependencies
+# Install Python dependencies
 COPY requirements.txt .
-
-# Install Python packages
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy entire project
+# Copy project files
 COPY . .
 
-# Copy supervisord config
+# Copy supervisor and nginx configs
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/nginx.conf /etc/nginx/nginx.conf
 
-# Make sure entrypoint is executable
-#RUN chmod +x docker/entrypoint.sh
+# Expose the port nginx is listening on
+EXPOSE 80
 
-# Run via supervisor
+# Start Supervisor
 CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
