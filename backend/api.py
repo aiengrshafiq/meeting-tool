@@ -1,5 +1,4 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Form
 from backend.webhook import router as webhook_router
 from common.zoom_api import create_zoom_meeting
 from dotenv import load_dotenv
@@ -12,12 +11,13 @@ load_dotenv()
 app = FastAPI()
 app.include_router(webhook_router)
 
-class MeetingRequest(BaseModel):
-    topic: str
-    start_time: str
-    duration: int
-    agenda: str = ""
-    participants: list[str]
+
+from fastapi.responses import RedirectResponse
+from starlette.requests import Request
+from starlette.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
+templates = Jinja2Templates(directory="frontend/templates")
 
 def save_participants(meeting_id: str, participants: list[str]):
     os.makedirs("data", exist_ok=True)
@@ -26,13 +26,21 @@ def save_participants(meeting_id: str, participants: list[str]):
         json.dump(participants, f)
 
 @app.post("/api/create-meeting")
-def create_meeting(request: MeetingRequest):
+def create_meeting(
+    topic: str = Form(...),
+    start_time: str = Form(...),
+    duration: int = Form(...),
+    agenda: str = Form(""),
+    participants: str = Form(...)
+):
+    participants_list = [p.strip() for p in participants.split(",") if p.strip()]
+
     payload = {
-        "topic": request.topic,
+        "topic": topic,
         "type": 2,
-        "start_time": request.start_time,
-        "duration": request.duration,
-        "agenda": request.agenda,
+        "start_time": start_time,
+        "duration": duration,
+        "agenda": agenda,
         "settings": {
             "auto_recording": "cloud",
             "join_before_host": True,
@@ -46,7 +54,7 @@ def create_meeting(request: MeetingRequest):
         result = create_zoom_meeting(payload)
 
         # Save participants
-        save_participants(result["id"], request.participants)
+        save_participants(result["id"], participants_list)
 
         return {
             "meeting_id": result["id"],
