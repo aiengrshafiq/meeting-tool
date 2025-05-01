@@ -51,5 +51,31 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
 
 @router.post("/api/zoom/webhook")
 async def zoom_webhook(request: Request):
+    body = await request.body()
+    payload = json.loads(body)
+
+    event = payload.get("event")
+
+    if event == "endpoint.url_validation":
+        from hmac import HMAC
+        import hashlib
+
+        plain_token = payload["payload"]["plainToken"]
+        secret_token = os.getenv("ZOOM_WEBHOOK_SECRET", "your_webhook_verification_token")
+        print("Your zoom webhook secret is ",secret_token)
+        encrypted_token = HMAC(
+            key=secret_token.encode(),
+            msg=plain_token.encode(),
+            digestmod=hashlib.sha256
+        ).hexdigest()
+
+        print("[🔒 Zoom URL validation passed]")
+        return {
+            "plainToken": plain_token,
+            "encryptedToken": encrypted_token
+        }
+
+    # ⬇️ Your actual recording handler follows...
     print("[📥 Webhook Triggered]")
     return {"status": "ok"}
+
