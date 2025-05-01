@@ -5,6 +5,7 @@ import tempfile
 import httpx
 from pathlib import Path
 from dotenv import load_dotenv
+import psycopg2  # ✅ for PostgreSQL
 
 from common.blob_storage import upload_file_to_blob
 from common.transcriber import transcribe_from_blob_url
@@ -15,6 +16,7 @@ load_dotenv()
 router = APIRouter()
 
 ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET", "myzoomsecret")
+POSTGRES_URL = os.getenv("POSTGRES_URL")
 
 def load_participants(meeting_id):
     path = Path(f"data/participants_{meeting_id}.json")
@@ -23,12 +25,55 @@ def load_participants(meeting_id):
             return json.load(f)
     return []
 
+def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
+    try:
+        conn = psycopg2.connect(POSTGRES_URL)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS meeting_logs (
+                meeting_id VARCHAR PRIMARY KEY,
+                host_email VARCHAR,
+                summary TEXT,
+                transcript TEXT
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO meeting_logs (meeting_id, host_email, summary, transcript)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (meeting_id) DO NOTHING
+        """, (meeting_id, host_email, summary, transcript))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f"[✅ Saved to PostgreSQL] Meeting: {meeting_id}")
+    except Exception as e:
+        print(f"[❌ PostgreSQL Error] {e}")
+
 @router.post("/api/zoom/webhook")
-async def zoom_webhook(request: Request, authorization: str = Header(None)):
+async def zoom_webhook(request: Request, zoom_auth: str = Header(None, alias="x-zoom-webhook-auth")):
+    expected_token = os.getenv("ZOOM_WEBHOOK_SECRET", "myzoomsecret")
+    if zoom_auth != expected_token:
+        print(f"[❌ Auth Failed] Received: {zoom_auth}")
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    print("[✅ Zoom Webhook Auth Passed]")
+    
     body = await request.body()
     payload = json.loads(body)
 
     event = payload.get("event")
+    # ✅ Handle Zoom URL Validation
+    if event == "endpoint.url_validation":
+        from hmac import HMAC
+        import hashlib
+        secret = ZOOM_WEBHOOK_SECRET.encode()
+        plain_token = payload["payload"]["plainToken"]
+        encrypted_token = HMAC(secret, plain_token.encode(), digestmod=hashlib.sha256).hexdigest()
+        return {
+            "plainToken": plain_token,
+            "encryptedToken": encrypted_token
+        }
+    
+    # ✅ Proceed to handle the recording
     if event != "recording.completed":
         raise HTTPException(status_code=400, detail="Unsupported event type")
 
@@ -45,8 +90,6 @@ async def zoom_webhook(request: Request, authorization: str = Header(None)):
 
         download_url = file["download_url"]
         filename = f"{file['file_type'].lower()}_{file['id']}.{file['file_type'].lower()}"
-
-        # Append access_token to download_url
         full_url = f"{download_url}?access_token={os.getenv('ZOOM_OAUTH_TOKEN')}"
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
@@ -58,15 +101,12 @@ async def zoom_webhook(request: Request, authorization: str = Header(None)):
             blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
             uploaded_files.append(blob_url)
 
-            # Transcribe with Whisper
             transcript = transcribe_from_blob_url(blob_url)
             if not transcript:
                 continue
 
-            # Summarize with GPT
             summary = summarize_transcript(transcript)
 
-            # Email to participants (or fallback to host)
             recipients = load_participants(meeting_id)
             if not recipients:
                 recipients = [host_email]
@@ -79,6 +119,9 @@ async def zoom_webhook(request: Request, authorization: str = Header(None)):
                     summary_text=summary,
                     transcript_text=transcript
                 )
+
+            # ✅ Save to PostgreSQL
+            save_meeting_to_postgres(meeting_id, host_email, summary, transcript)
 
     return {
         "status": "recordings uploaded & summary sent",
