@@ -50,83 +50,15 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
         print(f"[❌ PostgreSQL Error] {e}")
 
 @router.post("/api/zoom/webhook")
-async def zoom_webhook(request: Request, zoom_auth: str = Header(None, alias="x-zoom-webhook-auth")):
+async def zoom_webhook(request: Request, x_zoom_signature: str = Header(None)):
     expected_token = os.getenv("ZOOM_WEBHOOK_SECRET", "your_webhook_verification_token")
-    if zoom_auth != expected_token:
-        print(f"[❌ Auth Failed] Received: {zoom_auth}   ... while the expected token is {expected_token}")
+    print(f"Parameters Received = {expected_token} and {x_zoom_signature}")
+    if x_zoom_signature != expected_token:
+        print(f"[❌ Invalid Signature] Received: {x_zoom_signature}")
         raise HTTPException(status_code=401, detail="Unauthorized")
-    print("[✅ Zoom Webhook Auth Passed]")
 
-    body = await request.body()
-    payload = json.loads(body)
+    body = await request.json()
+    print("[✅ Zoom Webhook Verified]", body)
 
-    event = payload.get("event")
-    # ✅ Handle Zoom URL Validation
-    if event == "endpoint.url_validation":
-        from hmac import HMAC
-        import hashlib
-        secret = ZOOM_WEBHOOK_SECRET.encode()
-        plain_token = payload["payload"]["plainToken"]
-        encrypted_token = HMAC(secret, plain_token.encode(), digestmod=hashlib.sha256).hexdigest()
-        return {
-            "plainToken": plain_token,
-            "encryptedToken": encrypted_token
-        }
-    
-    # ✅ Proceed to handle the recording
-    if event != "recording.completed":
-        raise HTTPException(status_code=400, detail="Unsupported event type")
-
-    recording = payload["payload"]["object"]
-    meeting_id = str(recording["id"])
-    download_files = recording.get("recording_files", [])
-    host_email = recording.get("host_email")
-
-    uploaded_files = []
-
-    for file in download_files:
-        if file["file_type"] not in ["MP4", "M4A"]:
-            continue
-
-        download_url = file["download_url"]
-        filename = f"{file['file_type'].lower()}_{file['id']}.{file['file_type'].lower()}"
-        full_url = f"{download_url}?access_token={os.getenv('ZOOM_OAUTH_TOKEN')}"
-
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            async with httpx.AsyncClient() as client:
-                r = await client.get(full_url)
-                r.raise_for_status()
-                tmp.write(r.content)
-
-            blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
-            uploaded_files.append(blob_url)
-
-            transcript = transcribe_from_blob_url(blob_url)
-            if not transcript:
-                continue
-
-            summary = summarize_transcript(transcript)
-
-            recipients = load_participants(meeting_id)
-            if not recipients:
-                recipients = [host_email]
-
-            for email in recipients:
-                send_summary_email(
-                    to_email=email,
-                    to_name="Participant",
-                    subject=f"📝 Summary for Zoom Meeting {meeting_id}",
-                    summary_text=summary,
-                    transcript_text=transcript
-                )
-
-            # ✅ Save to PostgreSQL
-            save_meeting_to_postgres(meeting_id, host_email, summary, transcript)
-
-    return {
-        "status": "recordings uploaded & summary sent",
-        "meeting_id": meeting_id,
-        "host": host_email,
-        "recipients": recipients,
-        "files": uploaded_files
-    }
+    # Handle events here like recording.completed
+    return {"status": "ok"}
