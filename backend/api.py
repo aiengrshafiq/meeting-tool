@@ -56,12 +56,13 @@ def create_meeting(
         # Save participants
         save_participants(result["id"], participants_list)
 
-        return {
+        request.session["meeting"] = {
             "meeting_id": result["id"],
             "join_url": result["join_url"],
             "start_url": result["start_url"],
             "start_time": result["start_time"],
             "duration": result["duration"]
         }
+        return RedirectResponse(url="/success", status_code=302)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
