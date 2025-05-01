@@ -1,23 +1,22 @@
-from fastapi import APIRouter, Header, Request, HTTPException
-import os
-import json
-import tempfile
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse
+import os, json, hmac, hashlib, tempfile
 import httpx
+import psycopg2
 from pathlib import Path
 from dotenv import load_dotenv
-import psycopg2
+
 from common.blob_storage import upload_file_to_blob
 from common.transcriber import transcribe_from_blob_url
 from common.summarizer import summarize_transcript
 from common.emailer import send_summary_email
-from hmac import HMAC
-import hashlib
 
 load_dotenv()
 router = APIRouter()
-ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET", "34_3UQ_3ST2oDTVZtVN_MQ")
-print("your webhook secret is",ZOOM_WEBHOOK_SECRET)
+
+ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET", "default_secret")
 POSTGRES_URL = os.getenv("POSTGRES_URL")
+
 
 def load_participants(meeting_id):
     path = Path(f"data/participants_{meeting_id}.json")
@@ -25,6 +24,7 @@ def load_participants(meeting_id):
         with open(path, "r") as f:
             return json.load(f)
     return []
+
 
 def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
     try:
@@ -50,24 +50,34 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
     except Exception as e:
         print(f"[❌ PostgreSQL Error] {e}")
 
+
 @router.post("/api/zoom/webhook")
 async def zoom_webhook(request: Request):
     body = await request.body()
     payload = json.loads(body)
+
     event = payload.get("event")
 
+    # ✅ Handle Zoom URL Validation
     if event == "endpoint.url_validation":
         plain_token = payload["payload"]["plainToken"]
-        encrypted_token = HMAC(ZOOM_WEBHOOK_SECRET.encode(), plain_token.encode(), digestmod=hashlib.sha256).hexdigest()
-        print("[🔒 URL validation succeeded]")
-        return {
+        encrypted_token = hmac.new(
+            ZOOM_WEBHOOK_SECRET.encode(),
+            plain_token.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        print("🔒 URL validation succeeded")
+        return JSONResponse(content={
             "plainToken": plain_token,
             "encryptedToken": encrypted_token
-        }
+        })
 
+    # ✅ Ignore unsupported events
     if event != "recording.completed":
-        raise HTTPException(status_code=400, detail="Unsupported event type")
+        print(f"[⚠️ Ignored event] {event}")
+        return JSONResponse(content={"status": "ignored"}, status_code=200)
 
+    # ✅ Process the recording.completed event
     recording = payload["payload"]["object"]
     meeting_id = str(recording["id"])
     download_files = recording.get("recording_files", [])
@@ -88,33 +98,33 @@ async def zoom_webhook(request: Request):
                 r.raise_for_status()
                 tmp.write(r.content)
 
-            blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
-            uploaded_files.append(blob_url)
+        blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
+        uploaded_files.append(blob_url)
 
-            transcript = transcribe_from_blob_url(blob_url)
-            if not transcript:
-                continue
+        transcript = transcribe_from_blob_url(blob_url)
+        if not transcript:
+            continue
 
-            summary = summarize_transcript(transcript)
-            recipients = load_participants(meeting_id)
-            if not recipients:
-                recipients = [host_email]
+        summary = summarize_transcript(transcript)
+        recipients = load_participants(meeting_id)
+        if not recipients:
+            recipients = [host_email]
 
-            for email in recipients:
-                send_summary_email(
-                    to_email=email,
-                    to_name="Participant",
-                    subject=f"📝 Summary for Zoom Meeting {meeting_id}",
-                    summary_text=summary,
-                    transcript_text=transcript
-                )
+        for email in recipients:
+            send_summary_email(
+                to_email=email,
+                to_name="Participant",
+                subject=f"📝 Summary for Zoom Meeting {meeting_id}",
+                summary_text=summary,
+                transcript_text=transcript
+            )
 
-            save_meeting_to_postgres(meeting_id, host_email, summary, transcript)
+        save_meeting_to_postgres(meeting_id, host_email, summary, transcript)
 
-    return {
+    return JSONResponse(content={
         "status": "recordings uploaded & summary sent",
         "meeting_id": meeting_id,
         "host": host_email,
         "recipients": recipients,
         "files": uploaded_files
-    }
+    })
