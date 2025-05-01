@@ -15,7 +15,7 @@ import hashlib
 
 load_dotenv()
 router = APIRouter()
-ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET", "your_webhook_verification_token")
+ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET", "34_3UQ_3ST2oDTVZtVN_MQ")
 print("your webhook secret is",ZOOM_WEBHOOK_SECRET)
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 

@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from backend.webhook import router as webhook_router
 from common.zoom_api import create_zoom_meeting
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 app.include_router(webhook_router)
@@ -12,6 +13,14 @@ class MeetingRequest(BaseModel):
     duration: int
     agenda: str
     participants: list[str]
+
+@app.get("/api/test")
+async def test():
+    return JSONResponse({"status": "✅ FastAPI is working with get"})
+
+@app.get("/api/test_post")
+async def test_post():
+    return JSONResponse({"status": "✅ FastAPI is working with post"})
 
 @app.post("/api/create-meeting")
 def create_meeting(meeting: MeetingRequest):
