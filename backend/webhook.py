@@ -50,15 +50,6 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
         print(f"[❌ PostgreSQL Error] {e}")
 
 @router.post("/api/zoom/webhook")
-async def zoom_webhook(request: Request, x_zoom_signature: str = Header(None)):
-    expected_token = os.getenv("ZOOM_WEBHOOK_SECRET", "your_webhook_verification_token")
-    print(f"Parameters Received = {expected_token} and {x_zoom_signature}")
-    if x_zoom_signature != expected_token:
-        print(f"[❌ Invalid Signature] Received: {x_zoom_signature}")
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    body = await request.json()
-    print("[✅ Zoom Webhook Verified]", body)
-
-    # Handle events here like recording.completed
+async def zoom_webhook(request: Request):
+    print("[📥 Webhook Triggered]")
     return {"status": "ok"}
