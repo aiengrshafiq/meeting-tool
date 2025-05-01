@@ -51,12 +51,12 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
 
 @router.post("/api/zoom/webhook")
 async def zoom_webhook(request: Request, zoom_auth: str = Header(None, alias="x-zoom-webhook-auth")):
-    expected_token = os.getenv("ZOOM_WEBHOOK_SECRET", "myzoomsecret")
+    expected_token = os.getenv("ZOOM_WEBHOOK_SECRET", "your_webhook_verification_token")
     if zoom_auth != expected_token:
-        print(f"[❌ Auth Failed] Received: {zoom_auth}")
+        print(f"[❌ Auth Failed] Received: {zoom_auth}   ... while the expected token is {expected_token}")
         raise HTTPException(status_code=401, detail="Unauthorized")
     print("[✅ Zoom Webhook Auth Passed]")
-    
+
     body = await request.body()
     payload = json.loads(body)
 
