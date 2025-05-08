@@ -57,7 +57,8 @@ async def zoom_webhook(request: Request):
     payload = json.loads(body)
 
     event = payload.get("event")
-    print(f"[ We got event: ] {event}")
+    print(f"[🧩 EVENT RECEIVED] {event}")
+    print(f"[📦 PAYLOAD] {json.dumps(payload, indent=2)}")
 
     # ✅ Handle Zoom URL Validation
     if event == "endpoint.url_validation":
