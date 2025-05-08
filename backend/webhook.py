@@ -94,7 +94,12 @@ async def zoom_webhook(request: Request):
 
         download_url = file["download_url"]
         filename = f"{file['file_type'].lower()}_{file['id']}.{file['file_type'].lower()}"
-        full_url = f"{download_url}?access_token={os.getenv('ZOOM_OAUTH_TOKEN')}"
+
+        # ✅ Prefer token from webhook payload
+        download_token = payload.get("download_token")
+        if not download_token:
+            raise ValueError("Zoom download_token is missing from webhook payload")
+        full_url = f"{download_url}?access_token={download_token}"
 
         try:
             with tempfile.NamedTemporaryFile(delete=False) as tmp:
