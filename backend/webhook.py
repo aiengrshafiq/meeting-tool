@@ -57,6 +57,7 @@ async def zoom_webhook(request: Request):
     payload = json.loads(body)
 
     event = payload.get("event")
+    print(f"[ We got event: ] {event}")
 
     # ✅ Handle Zoom URL Validation
     if event == "endpoint.url_validation":
@@ -73,7 +74,7 @@ async def zoom_webhook(request: Request):
         })
 
     # ✅ Ignore unsupported events
-    if event != "recording.completed":
+    if event not in ["recording.completed", "recording.completed_all"]:
         print(f"[⚠️ Ignored event] {event}")
         return JSONResponse(content={"status": "ignored"}, status_code=200)
 
