@@ -43,7 +43,7 @@
     </div>
   </div>
 
-  <script>
+  <!-- <script>
     flatpickr(".datetimepicker", {
       enableTime: true,
       time_24hr: true,
@@ -61,6 +61,21 @@
   
         // ✅ Completely override the input
         instance.input.value = isoGst;
+      }
+    });
+  </script> -->
+
+  <script>
+    flatpickr(".datetimepicker", {
+      enableTime: true,
+      time_24hr: true,
+      allowInput: true,
+      defaultDate: new Date(),
+      dateFormat: "Z", // ISO format in UTC
+      onChange: function(selectedDates, dateStr, instance) {
+        if (!selectedDates.length) return;
+        const iso = selectedDates[0].toISOString().split(".")[0] + "Z";
+        instance.input.value = iso;
       }
     });
   </script>

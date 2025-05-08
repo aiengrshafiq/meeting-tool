@@ -15,6 +15,11 @@ def upload_file_to_blob(meeting_id, local_file_path, blob_filename=None):
 
     with open(local_file_path, "rb") as data:
         container_client.upload_blob(name=blob_path, data=data, overwrite=True)
+        print(f"[⬆️ Uploading] {local_file_path} as {blob_filename} to {blob_path}")
 
     print(f"[✅ Uploaded] {blob_path}")
+    print(f"[🔗 Blob URL] {container_client.url}/{blob_path}")
+
+    
+
     return f"{container_client.url}/{blob_path}"

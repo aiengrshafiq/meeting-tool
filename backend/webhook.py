@@ -92,11 +92,17 @@ async def zoom_webhook(request: Request):
         filename = f"{file['file_type'].lower()}_{file['id']}.{file['file_type'].lower()}"
         full_url = f"{download_url}?access_token={os.getenv('ZOOM_OAUTH_TOKEN')}"
 
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            async with httpx.AsyncClient() as client:
-                r = await client.get(full_url)
-                r.raise_for_status()
-                tmp.write(r.content)
+        print(f"[⬇️ Downloading] {filename} from Zoom: {full_url}")
+        try:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                async with httpx.AsyncClient() as client:
+                    r = await client.get(full_url)
+                    r.raise_for_status()
+                    tmp.write(r.content)
+            print(f"[💾 Saved to temp file] {tmp.name}")
+        except Exception as e:
+            print(f"[❌ Download Error] {e}")
+            raise
 
         blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
         uploaded_files.append(blob_url)
