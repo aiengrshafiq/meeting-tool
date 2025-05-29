@@ -73,6 +73,19 @@ async def zoom_webhook(request: Request):
             "plainToken": plain_token,
             "encryptedToken": encrypted_token
         })
+    # 🧪 Handle local test format
+    elif "plainToken" in payload:
+        plain_token = payload["plainToken"]
+        encrypted_token = hmac.new(
+            ZOOM_WEBHOOK_SECRET.encode(),
+            plain_token.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        print("🧪 Local test token validated")
+        return JSONResponse(content={
+            "plainToken": plain_token,
+            "encryptedToken": encrypted_token
+        })
 
     # ✅ Ignore unsupported events
     if event not in ["recording.completed", "recording.completed_all","recording.stopped"]:

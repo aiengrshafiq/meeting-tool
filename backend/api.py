@@ -39,13 +39,19 @@ def create_meeting(meeting: MeetingRequest):
         }
     }
 
-    try:
-        result = create_zoom_meeting(payload)
+    
 
+    try:
+        print(f"payload is: {payload}")
+        result = create_zoom_meeting(payload)
+        print(f"payload is: {result}")
+        if not result or "id" not in result:
+            raise HTTPException(status_code=500, detail="Failed to create Zoom meeting with shafiq")
         # Save participants (optional)
         from pathlib import Path
         import os, json
         os.makedirs("data", exist_ok=True)
+        print(f"Saving participants to data/participants_{result['id']}.json")
         with open(Path(f"data/participants_{result['id']}.json"), "w") as f:
             json.dump(meeting.participants, f)
 
