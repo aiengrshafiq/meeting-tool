@@ -90,7 +90,9 @@ async def zoom_webhook(request: Request):
 
     for file in download_files:
         if file["file_type"] not in ["MP4", "M4A"]:
+            print(f"[⚠️ Ignored File Type] {file["file_type"]}")
             continue
+
 
         download_url = file["download_url"]
         filename = f"{file['file_type'].lower()}_{file['id']}.{file['file_type'].lower()}"
