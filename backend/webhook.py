@@ -74,7 +74,7 @@ async def zoom_webhook(request: Request):
             "encryptedToken": encrypted_token
         })
     # 🧪 Handle local test format
-    elif "plainToken" in payload:
+    if "plainToken" in payload:
         plain_token = payload["plainToken"]
         encrypted_token = hmac.new(
             ZOOM_WEBHOOK_SECRET.encode(),
