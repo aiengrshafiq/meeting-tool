@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 import os, json, hmac, hashlib, tempfile
 import httpx
+import base64
 import psycopg2
 from pathlib import Path
 from dotenv import load_dotenv
@@ -14,7 +15,9 @@ from common.emailer import send_summary_email
 load_dotenv()
 router = APIRouter()
 
-ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET", "default_secret")
+ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET")
+if not ZOOM_WEBHOOK_SECRET:
+    raise ValueError("ZOOM_WEBHOOK_SECRET is not set in environment")
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 
 
@@ -70,32 +73,19 @@ async def zoom_webhook(request: Request):
                 hashlib.sha256
             ).digest()
         ).decode()
-
         print("🔒 URL validation succeeded")
         return JSONResponse(content={
             "plainToken": plain_token,
             "encryptedToken": encrypted_token
         })
-    # 🧪 Handle local test format
-    if "plainToken" in payload:
-        plain_token = payload["plainToken"]
-        encrypted_token = hmac.new(
-            ZOOM_WEBHOOK_SECRET.encode(),
-            plain_token.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        print("🧪 Local test token validated")
-        return JSONResponse(content={
-            "plainToken": plain_token,
-            "encryptedToken": encrypted_token
-        })
+    
 
     # ✅ Ignore unsupported events
     if event not in ["recording.completed", "recording.completed_all","recording.stopped"]:
         print(f"[⚠️ Ignored event] {event}")
         return JSONResponse(content={"status": "ignored"}, status_code=200)
 
-    recording = payload["payload"]["object"]
+    recording = payload.get("payload", {}).get("object", {})
     meeting_id = str(recording["id"])
     download_files = recording.get("recording_files", [])
     host_email = recording.get("host_email")
@@ -106,7 +96,8 @@ async def zoom_webhook(request: Request):
 
     for file in download_files:
         if file["file_type"] not in ["MP4", "M4A"]:
-            print(f"[⚠️ Ignored File Type] {file["file_type"]}")
+            file_type = file["file_type"]
+            print(" Ignored File Type")
             continue
 
 
@@ -151,6 +142,7 @@ async def zoom_webhook(request: Request):
 
         except Exception as e:
             print(f"[❌ Error Processing File] {e}")
+            return JSONResponse(status_code=500, content={"error": str(e)})
 
     return JSONResponse({
         "status": "processed via recording.stopped",
