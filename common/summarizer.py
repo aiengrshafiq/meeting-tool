@@ -1,13 +1,14 @@
-import openai
 import os
+from openai import OpenAI
 from dotenv import load_dotenv
+
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def summarize_transcript(transcript_text: str, language: str = "english") -> str:
     try:
         prompt = f"""
-You are an AI assistant. Summarize the following meeting transcript into concise bullet points and action items. 
+You are an AI assistant. Summarize the following meeting transcript into concise bullet points and action items.
 Focus on decisions made, follow-up tasks, and key discussion points.
 Write in formal tone in {language.title()}:
 
@@ -17,8 +18,8 @@ Transcript:
 \"\"\"
 """
 
-        response = openai.ChatCompletion.create(
-            model="gpt-4",  # Or "gpt-3.5-turbo" if cost/speed preferred
+        response = client.chat.completions.create(
+            model="gpt-4",  # or "gpt-3.5-turbo"
             messages=[
                 {"role": "system", "content": "You are a helpful meeting assistant."},
                 {"role": "user", "content": prompt}
