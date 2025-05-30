@@ -5,9 +5,9 @@ from common.zoom_auth import get_server_token
 
 def create_zoom_meeting(payload):
     
-
+    print("create_zoom_meeting called :")
     token = get_server_token()
-    print("access_token is inside function :", access_token)
+    print(f"token is inside function :{token}")
     user_id = os.getenv("ZOOM_USER_ID")
 
     if not user_id:
@@ -29,13 +29,14 @@ def create_zoom_meeting(payload):
     })
 
     try:
+        print(f"user_id is inside try :{user_id}")
         response = requests.post(
             f"https://api.zoom.us/v2/users/{user_id}/meetings",
             headers=headers,
             json=payload
         )
-        print("🔁 Response Status Code:", response.status_code)
-        print("🔁 Response Body:", response.text)
+        print(f"🔁 Response Status Code:{response.status_code}")
+        print(f"🔁 Response Body:{response.text}")
 
         response.raise_for_status()  # Will raise an HTTPError for non-2xx status
 

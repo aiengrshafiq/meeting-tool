@@ -24,7 +24,7 @@ def send_meeting_invite(to_email, to_name, meeting):
             "email": FROM_EMAIL
         },
         "to": [{"email": to_email, "name": to_name or "Participant"}],
-        "subject": "📅 Zoom Meeting Scheduled - Metamorphic.ae",
+        "subject": "📅 Zoom Meeting Scheduled - 6T3Media.com",
         "htmlContent": html_content
     }
 

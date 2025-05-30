@@ -44,7 +44,7 @@ def create_meeting(meeting: MeetingRequest):
     try:
         print(f"payload is: {payload}")
         result = create_zoom_meeting(payload)
-        print(f"payload is: {result}")
+        print(f"result is is: {result}")
         if not result or "id" not in result:
             raise HTTPException(status_code=500, detail="Failed to create Zoom meeting with shafiq")
         # Save participants (optional)

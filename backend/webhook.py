@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-import os, json, hmac, hashlib, tempfile
+import os, json, hmac, hashlib, base64, tempfile
 import httpx
-import base64
 import psycopg2
 from pathlib import Path
 from dotenv import load_dotenv
@@ -18,6 +17,7 @@ router = APIRouter()
 ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET")
 if not ZOOM_WEBHOOK_SECRET:
     raise ValueError("ZOOM_WEBHOOK_SECRET is not set in environment")
+
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 
 
@@ -56,96 +56,113 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
 
 @router.post("/api/zoom/webhook")
 async def zoom_webhook(request: Request):
-    body = await request.body()
-    payload = json.loads(body)
+    try:
+        body = await request.body()
+        payload = json.loads(body)
 
-    event = payload.get("event")
-    print(f"[🧩 EVENT RECEIVED] {event}")
-    print(f"[📦 PAYLOAD] {json.dumps(payload, indent=2)}")
+        event = payload.get("event")
+        print(f"[🧩 EVENT RECEIVED] {event}")
+        print(f"[📦 PAYLOAD] {json.dumps(payload, indent=2)}")
 
-    # ✅ Handle Zoom URL Validation
-    if event == "endpoint.url_validation":
-        plain_token = payload["payload"]["plainToken"]
-        encrypted_token = base64.b64encode(
-            hmac.new(
+        # ✅ Handle Zoom URL Validation
+        # if event == "endpoint.url_validation":
+        #     plain_token = payload["payload"]["plainToken"]
+        #     encrypted_token = base64.b64encode(
+        #         hmac.new(
+        #             ZOOM_WEBHOOK_SECRET.encode(),
+        #             plain_token.encode(),
+        #             hashlib.sha256
+        #         ).digest()
+        #     ).decode()
+        #     print("🔒 URL validation succeeded")
+        #     return JSONResponse(status_code=200, content={
+        #         "plainToken": plain_token,
+        #         "encryptedToken": encrypted_token
+        #     })
+         # ✅ Handle Zoom URL Validation
+        if event == "endpoint.url_validation":
+            plain_token = payload["payload"]["plainToken"]
+            encrypted_token = hmac.new(
                 ZOOM_WEBHOOK_SECRET.encode(),
                 plain_token.encode(),
                 hashlib.sha256
-            ).digest()
-        ).decode()
-        print("🔒 URL validation succeeded")
-        return JSONResponse(content={
-            "plainToken": plain_token,
-            "encryptedToken": encrypted_token
-        })
-    
+            ).hexdigest()
+            print("🔒 URL validation succeeded")
+            return JSONResponse(content={
+                "plainToken": plain_token,
+                "encryptedToken": encrypted_token
+            })
 
-    # ✅ Ignore unsupported events
-    if event not in ["recording.completed", "recording.completed_all","recording.stopped"]:
-        print(f"[⚠️ Ignored event] {event}")
-        return JSONResponse(content={"status": "ignored"}, status_code=200)
+        # ✅ Ignore unsupported events
+        if event not in ["recording.completed", "recording.completed_all", "recording.stopped"]:
+            print(f"[⚠️ Ignored event] {event}")
+            return JSONResponse(content={"status": "ignored"}, status_code=200)
 
-    recording = payload.get("payload", {}).get("object", {})
-    meeting_id = str(recording["id"])
-    download_files = recording.get("recording_files", [])
-    host_email = recording.get("host_email")
-    uploaded_files = []
+        recording = payload.get("payload", {}).get("object", {})
+        meeting_id = str(recording.get("id"))
+        download_files = recording.get("recording_files", [])
+        host_email = recording.get("host_email")
+        uploaded_files = []
 
-    print(f"[📼 Stopped Recording] Meeting ID: {meeting_id}, Host: {host_email}")
-    print(f"[📁 Files to process] {len(download_files)}")
+        print(f"[📼 Stopped Recording] Meeting ID: {meeting_id}, Host: {host_email}")
+        print(f"[📁 Files to process] {len(download_files)}")
 
-    for file in download_files:
-        if file["file_type"] not in ["MP4", "M4A"]:
-            file_type = file["file_type"]
-            print(" Ignored File Type")
-            continue
+        for file in download_files:
+            if file["file_type"] not in ["MP4", "M4A"]:
+                file_type = file["file_type"]
+                print(f"[⚠️ Ignored File Type] {file_type}")
+                continue
 
+            download_url = file["download_url"]
+            filename = f"{file['file_type'].lower()}_{file['id']}.{file['file_type'].lower()}"
 
-        download_url = file["download_url"]
-        filename = f"{file['file_type'].lower()}_{file['id']}.{file['file_type'].lower()}"
+            download_token = payload.get("download_token")
+            if not download_token:
+                raise ValueError("Zoom download_token is missing from webhook payload")
+            full_url = f"{download_url}?access_token={download_token}"
 
-        # ✅ Prefer token from webhook payload
-        download_token = payload.get("download_token")
-        if not download_token:
-            raise ValueError("Zoom download_token is missing from webhook payload")
-        full_url = f"{download_url}?access_token={download_token}"
-
-        try:
-            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp = tempfile.NamedTemporaryFile(delete=False)
+            try:
                 async with httpx.AsyncClient() as client:
                     r = await client.get(full_url)
                     r.raise_for_status()
                     tmp.write(r.content)
 
-            print(f"[⬆️ Uploading to Blob] {filename}")
-            blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
-            uploaded_files.append(blob_url)
-            os.remove(tmp.name)
+                print(f"[⬆️ Uploading to Blob] {filename}")
+                blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
+                uploaded_files.append(blob_url)
 
-            transcript = transcribe_from_blob_url(blob_url)
-            summary = summarize_transcript(transcript)
+                transcript = transcribe_from_blob_url(blob_url)
+                summary = summarize_transcript(transcript)
 
-            recipients = load_participants(meeting_id)
-            if not recipients:
-                recipients = [host_email]
+                recipients = load_participants(meeting_id)
+                if not recipients:
+                    recipients = [host_email]
 
-            for email in recipients:
-                send_summary_email(
-                    to_email=email,
-                    to_name="Participant",
-                    subject=f"📝 Summary for Zoom Meeting {meeting_id}",
-                    summary_text=summary,
-                    transcript_text=transcript
-                )
+                for email in recipients:
+                    send_summary_email(
+                        to_email=email,
+                        to_name="Participant",
+                        subject=f"📝 Summary for Zoom Meeting {meeting_id}",
+                        summary_text=summary,
+                        transcript_text=transcript
+                    )
 
-            save_meeting_to_postgres(meeting_id, host_email, summary, transcript)
+                save_meeting_to_postgres(meeting_id, host_email, summary, transcript)
 
-        except Exception as e:
-            print(f"[❌ Error Processing File] {e}")
-            return JSONResponse(status_code=500, content={"error": str(e)})
+            except Exception as e:
+                print(f"[❌ Error Processing File] {e}")
+                return JSONResponse(status_code=500, content={"error": str(e)})
+            finally:
+                tmp.close()
+                os.remove(tmp.name)
 
-    return JSONResponse({
-        "status": "processed via recording.stopped",
-        "meeting_id": meeting_id,
-        "files_uploaded": uploaded_files
-    })
+        return JSONResponse({
+            "status": "processed via recording.stopped",
+            "meeting_id": meeting_id,
+            "files_uploaded": uploaded_files
+        })
+
+    except Exception as e:
+        print(f"[❌ Top-level Error] {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})

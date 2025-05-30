@@ -8,6 +8,13 @@ def get_server_token():
     client_secret = os.getenv("ZOOM_CLIENT_SECRET")
     account_id = os.getenv("ZOOM_ACCOUNT_ID")
 
+    if not client_id:
+        raise ValueError("client_id is not set in environment variables.")
+    if not client_secret:
+        raise ValueError("client_secret is not set in environment variables.")
+    if not account_id:
+        raise ValueError("account_id is not set in environment variables.")
+
     url = "https://zoom.us/oauth/token"
     payload = {
         "grant_type": "account_credentials",
