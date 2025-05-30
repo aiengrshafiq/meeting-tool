@@ -109,9 +109,13 @@ async def zoom_webhook(request: Request):
 
             tmp = tempfile.NamedTemporaryFile(delete=False)
             try:
-                async with httpx.AsyncClient() as client:
-                    r = await client.get(full_url)
-                    r.raise_for_status()
+                async with httpx.AsyncClient(follow_redirects=True) as client:
+                    try:
+                        r = await client.get(full_url)
+                        r.raise_for_status()
+                    except httpx.HTTPStatusError as e:
+                        print(f"[❌ Download Failed] Status: {e.response.status_code}, URL: {full_url}")
+                        raise
                     tmp.write(r.content)
 
                 print(f"[⬆️ Uploading to Blob] {filename}")
