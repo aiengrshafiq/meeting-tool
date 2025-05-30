@@ -109,14 +109,17 @@ async def zoom_webhook(request: Request):
 
             tmp = tempfile.NamedTemporaryFile(delete=False)
             try:
-                async with httpx.AsyncClient(follow_redirects=True) as client:
+                async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
                     try:
-                        r = await client.get(full_url)
+                        print(f"[⏬ Downloading from] {full_url}")
+                        r = await client.get(full_url, headers={"User-Agent": "Zoom-Recorder-Bot"})
                         r.raise_for_status()
+                        tmp.write(r.content)
                     except httpx.HTTPStatusError as e:
-                        print(f"[❌ Download Failed] Status: {e.response.status_code}, URL: {full_url}")
+                        print(f"[❌ Download Failed] Status: {e.response.status_code}")
+                        print(f"[🔁 Response Headers] {e.response.headers}")
+                        print(f"[📍 Redirect URL] {e.response.headers.get('location')}")
                         raise
-                    tmp.write(r.content)
 
                 print(f"[⬆️ Uploading to Blob] {filename}")
                 blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
