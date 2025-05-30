@@ -64,21 +64,7 @@ async def zoom_webhook(request: Request):
         print(f"[🧩 EVENT RECEIVED] {event}")
         print(f"[📦 PAYLOAD] {json.dumps(payload, indent=2)}")
 
-        # ✅ Handle Zoom URL Validation
-        # if event == "endpoint.url_validation":
-        #     plain_token = payload["payload"]["plainToken"]
-        #     encrypted_token = base64.b64encode(
-        #         hmac.new(
-        #             ZOOM_WEBHOOK_SECRET.encode(),
-        #             plain_token.encode(),
-        #             hashlib.sha256
-        #         ).digest()
-        #     ).decode()
-        #     print("🔒 URL validation succeeded")
-        #     return JSONResponse(status_code=200, content={
-        #         "plainToken": plain_token,
-        #         "encryptedToken": encrypted_token
-        #     })
+        
          # ✅ Handle Zoom URL Validation
         if event == "endpoint.url_validation":
             plain_token = payload["payload"]["plainToken"]
