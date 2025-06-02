@@ -14,7 +14,9 @@
       <form method="POST" action="/schedule">
         <div class="mb-3">
           <label class="form-label">Meeting Topic</label>
-          <input type="text" class="form-control" name="topic" required>
+          
+          <input type="text" class="form-control" name="topic" required autofocus>
+
         </div>
 
         <div class="mb-3">
@@ -25,7 +27,9 @@
 
         <div class="mb-3">
           <label class="form-label">Duration (minutes)</label>
-          <input type="number" class="form-control" name="duration" value="30" required>
+          
+          <input type="number" class="form-control" name="duration" value="30" min="1" max="240" required>
+
         </div>
 
         <div class="mb-3">
@@ -35,35 +39,18 @@
 
         <div class="mb-3">
           <label class="form-label">Participants (comma-separated emails)</label>
-          <input type="text" class="form-control" name="participants" required>
+         
+          <input type="text" class="form-control" name="participants" placeholder="e.g. user1@example.com, user2@example.com" required>
+
         </div>
 
-        <button type="submit" class="btn btn-primary w-100">✅ Schedule Meeting</button>
+        
+        <button id="submitBtn" type="submit" class="btn btn-primary w-100">✅ Schedule Meeting</button>
       </form>
     </div>
   </div>
 
-  <!-- <script>
-    flatpickr(".datetimepicker", {
-      enableTime: true,
-      time_24hr: true,
-      allowInput: true,
-      defaultDate: new Date(),
-      dateFormat: "Z",  // disables default formatting
-      onChange: function(selectedDates, dateStr, instance) {
-        if (!selectedDates.length) return;
-  
-        const selected = selectedDates[0];
-  
-        // Convert to UTC+4 (GST)
-        const gst = new Date(selected.getTime() + (4 * 60 * 60 * 1000));
-        const isoGst = gst.toISOString().split(".")[0] + "Z";
-  
-        // ✅ Completely override the input
-        instance.input.value = isoGst;
-      }
-    });
-  </script> -->
+ 
 
   <script>
     flatpickr(".datetimepicker", {
@@ -80,7 +67,36 @@
     });
   </script>
   
-  
+  <script>
+  document.querySelector("form").addEventListener("submit", function(event) {
+    const submitBtn = document.getElementById("submitBtn");
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = "⏳ Processing...";
+  });
+</script>
+<script>
+  function validateEmails(input) {
+    const emails = input.split(',').map(e => e.trim());
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emails.every(email => emailRegex.test(email));
+  }
+
+  document.querySelector("form").addEventListener("submit", function(event) {
+    const submitBtn = document.getElementById("submitBtn");
+    const participantsInput = document.querySelector('input[name="participants"]');
+    const isValid = validateEmails(participantsInput.value);
+
+    if (!isValid) {
+      event.preventDefault();
+      alert("❌ One or more participant emails are invalid. Please check and try again.");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = "⏳ Processing...";
+  });
+</script>
+
   
 </body>
 </html>
