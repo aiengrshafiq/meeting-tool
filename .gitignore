@@ -182,4 +182,4 @@ cython_debug/
 temp_pdfs/
 crawler/temp/
 crawler/crawler/
-data/
+# data/
