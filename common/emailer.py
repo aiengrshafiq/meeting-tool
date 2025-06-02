@@ -8,58 +8,27 @@ BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 FROM_NAME = os.getenv("FROM_NAME", "Universal Meeting Assistant")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "no-reply@yourdomain.com")
 
-EMAIL_STYLE = """
-<style>
-  body {{
-    font-family: Arial, sans-serif;
-    background-color: #f9f9f9;
-    color: #333;
-  }}
-  .container {{
-    max-width: 600px;
-    margin: auto;
-    background: #ffffff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.05);
-  }}
-  .info-block {{
-    background:#f0f0f0;
-    padding:10px 15px;
-    border-left:4px solid #007bff;
-    margin-bottom:20px;
-  }}
-  a.button {{
-    display: inline-block;
-    padding: 10px 20px;
-    background-color: #007bff;
-    color: #fff !important;
-    border-radius: 5px;
-    text-decoration: none;
-    margin-top: 10px;
-  }}
-</style>
-"""
+
+
 
 def send_meeting_invite(to_email, to_name, meeting):
     subject = f"📅 Zoom Meeting Scheduled: {meeting['meeting_id']} on {meeting['start_time_gst']}"
 
     html_content = f"""
     <html>
-      <head>{EMAIL_STYLE}</head>
-      <body>
-        <div class="container">
+      <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; color: #333;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
           <p>Hello {to_name},</p>
           <h3>✅ Zoom Meeting Scheduled</h3>
 
-          <div class="info-block">
+          <div style="background:#f0f0f0; padding:10px 15px; border-left:4px solid #007bff; margin-bottom:20px;">
             <p><strong>Meeting ID:</strong> {meeting['meeting_id']}</p>
             <p><strong>Start Time:</strong> {meeting['start_time_gst']}</p>
             <p><strong>Duration:</strong> {meeting['duration']} minutes</p>
           </div>
 
-          <a href="{meeting['start_url']}" class="button">🚀 Start Meeting</a><br>
-          <a href="{meeting['join_url']}" class="button">👥 Join Meeting</a>
+          <a href="{meeting['start_url']}" style="display:inline-block; padding:10px 20px; background-color:#007bff; color:#fff; border-radius:5px; text-decoration:none;">🚀 Start Meeting</a><br><br>
+          <a href="{meeting['join_url']}" style="display:inline-block; padding:10px 20px; background-color:#007bff; color:#fff; border-radius:5px; text-decoration:none;">👥 Join Meeting</a>
 
           <p>If the buttons above don’t work, you can use these links:</p>
           <p><strong>Start:</strong> <a href="{meeting['start_url']}">{meeting['start_url']}</a></p>
@@ -97,30 +66,31 @@ def send_meeting_invite(to_email, to_name, meeting):
         print(f"[❌ Email Failed] {response.status_code} - {response.text}")
     else:
         print(f"[✅ Email Sent] To: {to_email}")
+        print("📨 Brevo Response:", response.text)
+
 
 
 def send_summary_email(to_email, to_name, subject, summary_text, transcript_text=None, join_url=None):
     html_content = f"""
     <html>
-      <head>{EMAIL_STYLE}</head>
-      <body>
-        <div class="container">
+      <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; color: #333;">
+        <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
           <p>Hello {to_name},</p>
           <h3>📝 Meeting Summary</h3>
 
           <p><strong>Summary:</strong></p>
-          <pre style="background:#f5f5f5;padding:10px;">{summary_text}</pre>
+          <pre style="background:#f5f5f5; padding:10px; white-space:pre-wrap;">{summary_text}</pre>
     """
 
     if transcript_text:
         html_content += f"""
           <p><strong>Transcript:</strong></p>
-          <pre style="background:#f5f5f5;padding:10px;white-space:pre-wrap;">{transcript_text}</pre>
+          <pre style="background:#f5f5f5; padding:10px; white-space:pre-wrap;">{transcript_text}</pre>
         """
 
     if join_url:
         html_content += f"""
-          <a href="{join_url}" class="button">👥 Join Meeting</a>
+          <a href="{join_url}" style="display:inline-block; padding:10px 20px; background-color:#007bff; color:#fff; border-radius:5px; text-decoration:none;">👥 Join Meeting</a>
           <p>If the button above doesn’t work, use this link:</p>
           <p><a href="{join_url}">{join_url}</a></p>
         """
