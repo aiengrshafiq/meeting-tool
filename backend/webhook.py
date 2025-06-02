@@ -29,7 +29,7 @@ def load_participants(meeting_id):
     return []
 
 
-def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
+def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipients, meeting_time):
     try:
         conn = psycopg2.connect(POSTGRES_URL)
         cursor = conn.cursor()
@@ -38,20 +38,30 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript):
                 meeting_id VARCHAR PRIMARY KEY,
                 host_email VARCHAR,
                 summary TEXT,
-                transcript TEXT
+                transcript TEXT,
+                recipients TEXT,
+                meeting_time TIMESTAMP
             )
         """)
         cursor.execute("""
-            INSERT INTO meeting_logs (meeting_id, host_email, summary, transcript)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO meeting_logs (meeting_id, host_email, summary, transcript, recipients, meeting_time)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (meeting_id) DO NOTHING
-        """, (meeting_id, host_email, summary, transcript))
+        """, (
+            meeting_id,
+            host_email,
+            summary,
+            transcript,
+            json.dumps(recipients),  # Store as JSON string
+            meeting_time
+        ))
         conn.commit()
         cursor.close()
         conn.close()
         print(f"[✅ Saved to PostgreSQL] Meeting: {meeting_id}")
     except Exception as e:
         print(f"[❌ PostgreSQL Error] {e}")
+
 
 
 @router.post("/api/zoom/webhook")
@@ -87,6 +97,7 @@ async def zoom_webhook(request: Request):
 
         recording = payload.get("payload", {}).get("object", {})
         meeting_id = str(recording.get("id"))
+        meeting_time = recording.get("start_time")
         download_files = recording.get("recording_files", [])
         host_email = recording.get("host_email")
         uploaded_files = []
@@ -142,7 +153,8 @@ async def zoom_webhook(request: Request):
                         transcript_text=transcript
                     )
 
-                save_meeting_to_postgres(meeting_id, host_email, summary, transcript)
+                
+                save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipients, meeting_time)
 
             except Exception as e:
                 print(f"[❌ Error Processing File] {e}")
