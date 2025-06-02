@@ -3,8 +3,9 @@ import os
 import requests
 import tempfile
 from dotenv import load_dotenv
+
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def transcribe_from_blob_url(blob_url):
     try:
@@ -18,14 +19,14 @@ def transcribe_from_blob_url(blob_url):
 
             print(f"[🎙️ Transcribing] {tmp.name}")
             with open(tmp.name, "rb") as audio_file:
-                transcript = openai.Audio.transcribe(
+                transcript_response = client.audio.transcriptions.create(
                     model="whisper-1",
                     file=audio_file,
                     response_format="text"
                 )
 
             print("[✅ Transcription complete]")
-            return transcript
+            return transcript_response
 
     except Exception as e:
         print(f"[❌ Error] Transcription failed: {str(e)}")

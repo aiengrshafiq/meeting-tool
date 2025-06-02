@@ -80,7 +80,8 @@ async def zoom_webhook(request: Request):
             })
 
         # ✅ Ignore unsupported events
-        if event not in ["recording.completed", "recording.completed_all", "recording.stopped"]:
+        # if event not in ["recording.completed", "recording.completed_all", "recording.stopped"]:
+        if event != "recording.completed":
             print(f"[⚠️ Ignored event] {event}")
             return JSONResponse(content={"status": "ignored"}, status_code=200)
 

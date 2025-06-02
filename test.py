@@ -1,6 +1,6 @@
 from common.transcriber import transcribe_from_blob_url
 from common.summarizer import summarize_transcript
-blob_url = "https://metameetingtoolstorage.blob.core.windows.net/meetings/89020752845/mp4_de64b75d-9035-4dd0-931f-cd37519b24f2.mp4"  # Replace with actual Blob URL
+blob_url = "https://metameetingtoolstorage.blob.core.windows.net/meetings/84045239718/mp4_869519d3-a03b-4a5a-84e6-beeeaf383d56.mp4"  # Replace with actual Blob URL
 transcript = transcribe_from_blob_url(blob_url)
 print(transcript)
 # transcript = """
