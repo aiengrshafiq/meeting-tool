@@ -7,7 +7,7 @@ def create_zoom_meeting(payload, host_email):
     
     print("create_zoom_meeting called :")
     token = get_server_token()
-    print(f"token is inside function :{token}")
+    #print(f"token is inside function :{token}")
     user_id = os.getenv("ZOOM_USER_ID")
 
     if not host_email:
@@ -34,7 +34,7 @@ def create_zoom_meeting(payload, host_email):
         print(f"user_id is inside try :{user_id}")
         print(f"Using host_email: {host_email}")
         response = requests.post(
-            f"https://api.zoom.us/v2/users/{host_email}/meetings",
+            f"https://api.zoom.us/v2/users/me/meetings",
             headers=headers,
             json=payload
         )

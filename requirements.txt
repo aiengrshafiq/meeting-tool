@@ -27,3 +27,7 @@ python-multipart
 pydantic
 aiofiles
 python-dateutil
+
+#auth
+flask-login
+werkzeug

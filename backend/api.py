@@ -14,6 +14,7 @@ class MeetingRequest(BaseModel):
     agenda: str
     participants: list[str]
     host_email: str
+    created_by_email: str
 
 
 @app.get("/api/test")
@@ -54,15 +55,21 @@ def create_meeting(meeting: MeetingRequest):
         import os, json
         os.makedirs("data", exist_ok=True)
         print(f"Saving participants to data/participants_{result['id']}.json")
+        
+        
         with open(Path(f"data/participants_{result['id']}.json"), "w") as f:
-            json.dump(meeting.participants, f)
+            json.dump({
+                "emails": meeting.participants,
+                "created_by_email": meeting.created_by_email
+            }, f)
 
         return {
             "id": result["id"],
             "join_url": result["join_url"],
             "start_url": result["start_url"],
             "start_time": result["start_time"],
-            "duration": result["duration"]
+            "duration": result["duration"],
+            "created_by_email": meeting.created_by_email
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
