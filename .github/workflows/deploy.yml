@@ -1,4 +1,4 @@
-name: Build and Deploy Legal GPT Chatbot to Azure Web App
+name: Build and Deploy Meeting Tool to Azure Container App
 
 on:
   push:
@@ -9,38 +9,40 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      IMAGE_NAME: meeting-tool
+
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
+      - name: 🛠️ Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Azure Container Registry
+      - name: 🔐 Log in to Azure Container Registry
         uses: azure/docker-login@v1
         with:
           login-server: ${{ secrets.ACR_LOGIN_SERVER }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Pull previous image for cache (optional)
-        run: |
-          docker pull ${{ secrets.ACR_LOGIN_SERVER }}/meeting-tool:latest || true
+      - name: 🏷️ Define dynamic image tag
+        id: set-tag
+        run: echo "TAG=build-$(date +%s)" >> $GITHUB_ENV
 
-      - name: Build and push Docker image with cache
+      - name: 🏗️ Build and Push Docker image
         run: |
-          docker build \
-            --cache-from ${{ secrets.ACR_LOGIN_SERVER }}/meeting-tool:latest \
-            -t ${{ secrets.ACR_LOGIN_SERVER }}/meeting-tool:latest .
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/meeting-tool:latest
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/$IMAGE_NAME:$TAG .
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/$IMAGE_NAME:$TAG
 
-      - name: Azure Login
+      - name: 🔐 Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
+      - name: 🚀 Deploy to Azure Container App
+        uses: azure/container-apps-deploy-action@v1
         with:
-          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
-          images: ${{ secrets.ACR_LOGIN_SERVER }}/meeting-tool:latest
+          imageToDeploy: ${{ secrets.ACR_LOGIN_SERVER }}/$IMAGE_NAME:$TAG
+          containerAppName: ${{ secrets.AZURE_CONTAINERAPP_NAME }}
+          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
