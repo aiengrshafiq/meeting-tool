@@ -61,8 +61,12 @@ def load_participants(meeting_id):
     if path.exists():
         with open(path, "r") as f:
             data = json.load(f)
-            return data.get("emails", []), data.get("created_by_email", "unknown")
-    return [], "unknown"
+            return (
+                data.get("emails", []),
+                data.get("created_by_email", "unknown"),
+                data.get("form_host_email", None)  # ✅ NEW
+            )
+    return [], "unknown", None
 
 def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipients, meeting_time, created_by_email):
     try:
@@ -162,9 +166,12 @@ async def zoom_webhook(request: Request):
 
                 transcript = transcribe_from_blob_url(blob_url)
                 summary = summarize_transcript(transcript)
-                recipients, created_by_email = load_participants(meeting_id)
+                recipients, created_by_email, form_host_email = load_participants(meeting_id)
                 if not recipients:
                     recipients = [host_email]
+
+                if form_host_email and form_host_email not in recipients:
+                    recipients.append(form_host_email)
 
                 for email in recipients:
                     send_summary_email(
@@ -175,7 +182,7 @@ async def zoom_webhook(request: Request):
                         transcript_text=transcript
                     )
 
-                save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipients, meeting_time,created_by_email)
+                save_meeting_to_postgres(meeting_id, form_host_email, summary, transcript, recipients, meeting_time,created_by_email)
                 mark_meeting_as_processed(meeting_id)
 
             finally:

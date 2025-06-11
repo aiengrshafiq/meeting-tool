@@ -60,7 +60,8 @@ def create_meeting(meeting: MeetingRequest):
         with open(Path(f"data/participants_{result['id']}.json"), "w") as f:
             json.dump({
                 "emails": meeting.participants,
-                "created_by_email": meeting.created_by_email
+                "created_by_email": meeting.created_by_email,
+                "form_host_email": meeting.host_email 
             }, f)
 
         return {
@@ -69,7 +70,8 @@ def create_meeting(meeting: MeetingRequest):
             "start_url": result["start_url"],
             "start_time": result["start_time"],
             "duration": result["duration"],
-            "created_by_email": meeting.created_by_email
+            "created_by_email": meeting.created_by_email,
+            "form_host_email": meeting.host_email
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
