@@ -69,7 +69,7 @@ def load_participants(meeting_id):
             )
     return [], "unknown", None
 
-def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipients, meeting_time, created_by_email):
+def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipients, meeting_time, created_by_email,recording_full_url):
     try:
         conn = psycopg2.connect(POSTGRES_URL)
         cursor = conn.cursor()
@@ -81,12 +81,14 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipi
                 transcript TEXT,
                 recipients TEXT,
                 meeting_time TIMESTAMP,
-                created_by_email VARCHAR
+                created_by_email VARCHAR,
+                recording_full_url TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         cursor.execute("""
-            INSERT INTO meeting_logs (meeting_id, host_email, summary, transcript, recipients, meeting_time, created_by_email)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO meeting_logs (eeting_id, host_email, summary, transcript,recipients, meeting_time, created_by_email,recording_full_url)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (meeting_id) DO NOTHING
         """, (
             meeting_id,
@@ -95,7 +97,9 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipi
             transcript,
             json.dumps(recipients),
             meeting_time,
-            created_by_email
+            created_by_email,
+            recording_full_url
+
         ))
         conn.commit()
         cursor.close()
@@ -156,6 +160,8 @@ async def zoom_webhook(request: Request):
                 raise ValueError("Zoom download_token is missing")
             full_url = f"{download_url}?access_token={download_token}"
 
+            recording_full_url = full_url
+
             tmp = tempfile.NamedTemporaryFile(delete=False)
             try:
                 async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
@@ -187,7 +193,7 @@ async def zoom_webhook(request: Request):
                 
 
                 effective_host_email = form_host_email or host_email
-                save_meeting_to_postgres(meeting_id, effective_host_email, summary, transcript, recipients, meeting_time,created_by_email)
+                save_meeting_to_postgres(meeting_id, effective_host_email, summary, transcript, recipients, meeting_time,created_by_email,recording_full_url)
                 mark_meeting_as_processed(meeting_id)
 
             finally:
