@@ -87,7 +87,7 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipi
             )
         """)
         cursor.execute("""
-            INSERT INTO meeting_logs (eeting_id, host_email, summary, transcript,recipients, meeting_time, created_by_email,recording_full_url)
+            INSERT INTO meeting_logs (meeting_id, host_email, summary, transcript,recipients, meeting_time, created_by_email,recording_full_url)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (meeting_id) DO NOTHING
         """, (
@@ -108,6 +108,7 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipi
         print(f"[✅ Saved to PostgreSQL] Meeting: {meeting_id}")
     except Exception as e:
         print(f"[❌ PostgreSQL Error] {e}")
+        traceback.print_exc()
 
 @router.post("/api/zoom/webhook")
 async def zoom_webhook(request: Request):
