@@ -10,6 +10,7 @@ from common.blob_storage import upload_file_to_blob
 from common.transcriber import transcribe_from_blob_url
 from common.summarizer import summarize_transcript
 from common.emailer import send_summary_email
+import traceback
 
 load_dotenv()
 router = APIRouter()
@@ -99,6 +100,7 @@ def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipi
         conn.commit()
         cursor.close()
         conn.close()
+        print(f"[📝 Saved to DB] host_email={host_email}, created_by={created_by_email}")
         print(f"[✅ Saved to PostgreSQL] Meeting: {meeting_id}")
     except Exception as e:
         print(f"[❌ PostgreSQL Error] {e}")
@@ -182,7 +184,10 @@ async def zoom_webhook(request: Request):
                         transcript_text=transcript
                     )
 
-                save_meeting_to_postgres(meeting_id, form_host_email, summary, transcript, recipients, meeting_time,created_by_email)
+                
+
+                effective_host_email = form_host_email or host_email
+                save_meeting_to_postgres(meeting_id, effective_host_email, summary, transcript, recipients, meeting_time,created_by_email)
                 mark_meeting_as_processed(meeting_id)
 
             finally:
@@ -197,4 +202,5 @@ async def zoom_webhook(request: Request):
 
     except Exception as e:
         print(f"[❌ Top-level Error] {e}")
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(e)})
