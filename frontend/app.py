@@ -29,11 +29,9 @@ def require_login():
         return redirect(url_for("auth.login"))
 
 
-
 @app.route('/')
 def home():
     return render_template('form.html')
-
 
 
 @app.route('/schedule', methods=['POST'])
