@@ -36,7 +36,10 @@
           <label class="form-label">Agenda</label>
           <textarea class="form-control" name="agenda" rows="3"></textarea>
         </div>
-
+        <div class="mb-3">
+        <label class="form-label">Host Email</label>
+        <input type="email" class="form-control" name="host_email" placeholder="e.g. host@example.com" required>
+      </div>
         <div class="mb-3">
           <label class="form-label">Participants (comma-separated emails)</label>
          
@@ -75,6 +78,10 @@
   });
 </script>
 <script>
+   function validateEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email.trim());
+  }
   function validateEmails(input) {
     const emails = input.split(',').map(e => e.trim());
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -85,6 +92,13 @@
     const submitBtn = document.getElementById("submitBtn");
     const participantsInput = document.querySelector('input[name="participants"]');
     const isValid = validateEmails(participantsInput.value);
+    const hostEmailInput = document.querySelector('input[name="host_email"]');
+    // Validate host email
+    if (!validateEmail(hostEmailInput.value)) {
+      event.preventDefault();
+      alert("❌ Host email is invalid. Please enter a valid email address.");
+      return;
+    }
 
     if (!isValid) {
       event.preventDefault();

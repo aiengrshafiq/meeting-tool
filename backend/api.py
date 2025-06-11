@@ -13,6 +13,8 @@ class MeetingRequest(BaseModel):
     duration: int
     agenda: str
     participants: list[str]
+    host_email: str
+
 
 @app.get("/api/test")
 async def test():
@@ -43,7 +45,7 @@ def create_meeting(meeting: MeetingRequest):
 
     try:
         print(f"payload is: {payload}")
-        result = create_zoom_meeting(payload)
+        result = create_zoom_meeting(payload, meeting.host_email)
         print(f"result is is: {result}")
         if not result or "id" not in result:
             raise HTTPException(status_code=500, detail="Failed to create Zoom meeting with shafiq")

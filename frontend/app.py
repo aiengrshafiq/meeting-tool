@@ -31,13 +31,15 @@ def schedule():
     duration = int(request.form['duration'])
     agenda = request.form['agenda']
     participants = [p.strip() for p in request.form['participants'].split(',')]
+    host_email = request.form['host_email']
 
     payload = {
         "topic": topic,
         "start_time": start_time,
         "duration": duration,
         "agenda": agenda,
-        "participants": participants
+        "participants": participants,
+        "host_email": host_email
     }
 
     try:

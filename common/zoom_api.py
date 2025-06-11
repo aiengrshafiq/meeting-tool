@@ -3,13 +3,15 @@ import requests
 from common.zoom_auth import get_server_token
 
 
-def create_zoom_meeting(payload):
+def create_zoom_meeting(payload, host_email):
     
     print("create_zoom_meeting called :")
     token = get_server_token()
     print(f"token is inside function :{token}")
     user_id = os.getenv("ZOOM_USER_ID")
 
+    if not host_email:
+        raise ValueError("host_email is required for Zoom meeting creation.")
     if not user_id:
         raise ValueError("ZOOM_USER_ID is not set in environment variables.")
     if not token:
@@ -30,8 +32,9 @@ def create_zoom_meeting(payload):
 
     try:
         print(f"user_id is inside try :{user_id}")
+        print(f"Using host_email: {host_email}")
         response = requests.post(
-            f"https://api.zoom.us/v2/users/{user_id}/meetings",
+            f"https://api.zoom.us/v2/users/{host_email}/meetings",
             headers=headers,
             json=payload
         )
