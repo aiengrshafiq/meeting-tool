@@ -10,9 +10,14 @@
 <body class="bg-light">
   <div class="container py-2">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <span class="text-muted">👤 Logged in as {{ session['user_email'] }}</span>
-      <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
-    </div>
+  <span class="text-muted">👤 Logged in as {{ session['user_email'] }}</span>
+  <div>
+    {% if session['user_role'] == 'admin' %}
+      <a href="{{ url_for('auth.dashboard') }}" class="btn btn-outline-primary btn-sm me-2">📊 View Dashboard</a>
+    {% endif %}
+    <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
+  </div>
+</div>
   </div>
   <div class="container py-5">
     <div class="card shadow-lg p-4">

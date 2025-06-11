@@ -3,7 +3,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import Column, Integer, String, DateTime
 from datetime import datetime
 from .db import Base, SessionLocal
+import os, json
+import httpx, psycopg2
 
+from dotenv import load_dotenv
 auth_bp = Blueprint("auth", __name__)
 
 # SQLAlchemy model
@@ -55,3 +58,29 @@ def logout():
     session.clear()
     flash("👋 Logged out", "info")
     return redirect(url_for("auth.login"))
+
+@auth_bp.route("/dashboard")
+def dashboard():
+    if session.get("user_role") != "admin":
+        flash("Access denied. Admins only.")
+        return redirect(url_for("home"))
+
+    try:
+        conn = psycopg2.connect(os.getenv("POSTGRES_URL"))
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT meeting_id, host_email, created_by_email, meeting_time, summary,recipients, recording_full_url
+            , transcript, created_at
+            FROM meeting_logs
+            ORDER BY meeting_time DESC
+            LIMIT 200
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return render_template("dashboard.html", meetings=rows)
+    except Exception as e:
+        print(f"[❌ Error loading dashboard] {e}")
+        flash("Failed to load dashboard.")
+        return redirect(url_for("home"))
+

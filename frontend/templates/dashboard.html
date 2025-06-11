@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap JavaScript for modals and components -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3>📊 Admin Dashboard</h3>
+      <a href="{{ url_for('home') }}" class="btn btn-secondary">⬅ Back to Form</a>
+    </div>
+    <div class="card shadow">
+      <div class="card-body table-responsive">
+       <table class="table table-bordered table-hover table-sm align-middle">
+  <thead class="table-dark">
+    <tr>
+      <th>Meeting ID</th>
+      <th>Host Email</th>
+      <th>Created By</th>
+      <th>Meeting Time</th>
+      <th>Summary</th>
+      <th>Recipients</th>
+      <th>Recording</th>
+      <th>Created At</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for meeting in meetings %}
+    <tr>
+      <td>{{ meeting[0] }}</td>
+      <td>{{ meeting[1] }}</td>
+      <td>{{ meeting[2] }}</td>
+      <td>{{ meeting[3] }}</td>
+
+      <!-- Summary with modal -->
+      <td>
+        <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#summaryModal{{ loop.index }}">
+          View
+        </button>
+        <!-- Modal -->
+        <div class="modal fade" id="summaryModal{{ loop.index }}" tabindex="-1" aria-labelledby="summaryModalLabel{{ loop.index }}" aria-hidden="true">
+          <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">📄 Meeting Summary</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <pre style="white-space: pre-wrap;">{{ meeting[4] }}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </td>
+
+      <!-- Recipients -->
+      <td>
+        <span class="d-inline-block text-truncate" style="max-width: 180px;" title="{{ meeting[5] }}">
+          {{ meeting[5] }}
+        </span>
+      </td>
+
+      <!-- Recording link -->
+      <td>
+        <a href="{{ meeting[6] }}" class="btn btn-outline-success btn-sm" target="_blank">🎧 Open</a>
+      </td>
+
+      <td>{{ meeting[8] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+      </div>
+    </div>
+  </div>
+</body>
+</html>

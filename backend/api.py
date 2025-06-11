@@ -3,9 +3,15 @@ from fastapi import FastAPI, HTTPException
 from backend.webhook import router as webhook_router
 from common.zoom_api import create_zoom_meeting
 from fastapi.responses import JSONResponse
+import os, json
+import httpx, psycopg2
+
+from dotenv import load_dotenv
 
 app = FastAPI()
 app.include_router(webhook_router)
+
+POSTGRES_URL = os.getenv("POSTGRES_URL")
 
 class MeetingRequest(BaseModel):
     topic: str
@@ -50,6 +56,9 @@ def create_meeting(meeting: MeetingRequest):
         print(f"result is is: {result}")
         if not result or "id" not in result:
             raise HTTPException(status_code=500, detail="Failed to create Zoom meeting with shafiq")
+
+        # Save the scheduled meeting to the database
+        save_scheduled_meeting(result["id"], meeting)
         # Save participants (optional)
         from pathlib import Path
         import os, json
@@ -75,3 +84,45 @@ def create_meeting(meeting: MeetingRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def save_scheduled_meeting(meeting_id, meeting: MeetingRequest):
+    try:
+        conn = psycopg2.connect(POSTGRES_URL)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scheduled_meetings (
+                meeting_id VARCHAR PRIMARY KEY,
+                topic TEXT,
+                start_time TIMESTAMP,
+                duration INTEGER,
+                agenda TEXT,
+                participants TEXT,
+                host_email VARCHAR,
+                created_by_email VARCHAR,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO scheduled_meetings (
+                meeting_id, topic, start_time, duration, agenda,
+                participants, host_email, created_by_email
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (meeting_id) DO NOTHING
+        """, (
+            meeting_id,
+            meeting.topic,
+            meeting.start_time,
+            meeting.duration,
+            meeting.agenda,
+            json.dumps(meeting.participants),
+            meeting.host_email,
+            meeting.created_by_email
+        ))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f"[🗂️ Saved scheduled meeting {meeting_id}]")
+    except Exception as e:
+        print(f"[❌ Error saving scheduled meeting] {e}")
+
