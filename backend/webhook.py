@@ -161,7 +161,7 @@ async def zoom_webhook(request: Request):
                 raise ValueError("Zoom download_token is missing")
             full_url = f"{download_url}?access_token={download_token}"
 
-            recording_full_url = full_url
+            
 
             tmp = tempfile.NamedTemporaryFile(delete=False)
             try:
@@ -172,6 +172,8 @@ async def zoom_webhook(request: Request):
 
                 blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
                 uploaded_files.append(blob_url)
+
+                recording_full_url = blob_url
 
                 transcript = transcribe_from_blob_url(blob_url)
                 summary = summarize_transcript(transcript)
