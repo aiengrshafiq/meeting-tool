@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>All Meetings</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap JavaScript for modals and components -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3>📊 All Meetings</h3>
+      <a href="{{ url_for('home') }}" class="btn btn-secondary">⬅ Back to Form</a>
+    </div>
+    <div class="card shadow">
+      <div class="card-body table-responsive">
+       <table class="table table-bordered table-hover table-sm align-middle">
+  <thead class="table-dark">
+    <tr>
+      <th>Meeting ID</th>
+      <th>Topic</th>
+      <th>Start Time</th>
+      <th>Participants</th>
+      <th>Host</th>
+      <th>Created By</th>
+      <th>Created At</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for meeting in meetings %}
+    <tr>
+      <td>{{ meeting[0] }}</td>
+      <td>{{ meeting[1] }}</td>
+      <td>{{ meeting[2] }}</td>
+      
+
+
+      <!-- Recipients -->
+      <td>
+        <span class="d-inline-block text-truncate" style="max-width: 180px;" title="{{ meeting[3] }}">
+          {{ meeting[3] }}
+        </span>
+      </td>
+
+      <td>{{ meeting[4] }}</td>
+
+      <td>{{ meeting[5] }}</td>
+      <td>{{ meeting[6] }}</td>
+      <td>  <form method="POST" action="{{ url_for('auth.cancel_meeting') }}" onsubmit="return confirm('Are you sure you want to cancel this meeting?');">
+  <input type="hidden" name="meeting_id" value="{{ meeting[0] }}">
+  <button type="submit" class="btn btn-sm btn-danger">❌ Cancel</button>
+</form></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+      </div>
+    </div>
+  </div>
+</body>
+</html>

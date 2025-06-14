@@ -118,3 +118,24 @@ def create_zoom_meeting(payload: dict, host_email: str) -> dict:
         raise Exception(msg)
 
     return response.json()
+
+def cancel_zoom_meeting(meeting_id: str):
+    token = get_server_token()
+    if not token:
+        raise ValueError("Zoom token missing")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        res = requests.delete(
+            f"https://api.zoom.us/v2/meetings/{meeting_id}",
+            headers=headers,
+            timeout=10
+        )
+        res.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"[❌ Zoom cancel error]: {e}")
+        raise Exception("Failed to cancel Zoom meeting")

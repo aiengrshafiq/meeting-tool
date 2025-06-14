@@ -15,6 +15,9 @@
     {% if session['user_role'] == 'admin' %}
       <a href="{{ url_for('auth.dashboard') }}" class="btn btn-outline-primary btn-sm me-2">📊 View Dashboard</a>
     {% endif %}
+    {% if session['user_role'] == 'admin' %}
+      <a href="{{ url_for('auth.meetings') }}" class="btn btn-outline-primary btn-sm me-2">📊 View Meetings</a>
+    {% endif %}
     <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
   </div>
 </div>

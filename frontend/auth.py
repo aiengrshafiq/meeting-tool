@@ -84,3 +84,48 @@ def dashboard():
         flash("Failed to load dashboard.")
         return redirect(url_for("home"))
 
+@auth_bp.route("/meetings")
+def meetings():
+    if session.get("user_role") != "admin":
+        flash("Access denied. Admins only.")
+        return redirect(url_for("home"))
+
+    try:
+        conn = psycopg2.connect(os.getenv("POSTGRES_URL"))
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT meeting_id, topic, start_time, 
+                participants, host_email, created_by_email, created_at
+            FROM scheduled_meetings
+            ORDER BY created_at DESC
+            LIMIT 200
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return render_template("meetings.html", meetings=rows)
+    except Exception as e:
+        print(f"[❌ Error loading meetings] {e}")
+        flash("Failed to load meetings.")
+        return redirect(url_for("home"))
+
+@auth_bp.route("/cancel", methods=["POST"])
+def cancel_meeting():
+    if session.get("user_role") != "admin":
+        flash("Unauthorized access", "danger")
+        return redirect(url_for("auth.dashboard"))
+
+    meeting_id = request.form.get("meeting_id")
+    if not meeting_id:
+        flash("Missing meeting ID", "danger")
+        return redirect(url_for("auth.dashboard"))
+
+    try:
+        # Call FastAPI endpoint to cancel Zoom meeting
+        res = requests.delete(f"{os.getenv('API_BASE_URL')}/api/cancel-meeting/{meeting_id}")
+        res.raise_for_status()
+        flash("✅ Meeting cancelled successfully.", "success")
+    except requests.exceptions.RequestException as e:
+        flash(f"❌ Failed to cancel meeting: {str(e)}", "danger")
+
+    return redirect(url_for("auth.dashboard"))

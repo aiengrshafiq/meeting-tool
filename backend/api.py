@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from backend.webhook import router as webhook_router
 from common.zoom_api import create_zoom_meeting, find_available_host, is_host_available
+from common.zoom_api import cancel_zoom_meeting
 from fastapi.responses import JSONResponse
 from pathlib import Path
 from dotenv import load_dotenv
@@ -141,3 +142,26 @@ def save_scheduled_meeting(meeting_id: str, meeting: MeetingRequest):
     finally:
         if cursor: cursor.close()
         if conn: conn.close()
+
+@app.delete("/api/cancel-meeting/{meeting_id}")
+def cancel_meeting(meeting_id: str):
+    try:
+        cancel_zoom_meeting(meeting_id)
+        delete_scheduled_meeting(meeting_id)
+        return {"status": "cancelled"}
+    except Exception as e:
+        print(f"[❌ Cancel error] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+def delete_scheduled_meeting(meeting_id: str):
+    try:
+        conn = psycopg2.connect(POSTGRES_URL)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM scheduled_meetings WHERE meeting_id = %s", (meeting_id,))
+        conn.commit()
+    except Exception as e:
+        print(f"[❌ DB delete error]: {e}")
+        raise
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
