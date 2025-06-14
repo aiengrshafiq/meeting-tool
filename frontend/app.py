@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash,session
+
 import requests
 import os
 from dotenv import load_dotenv
@@ -77,10 +78,19 @@ def schedule():
 
         return render_template("success.html", meeting=data)
 
+    except requests.exceptions.HTTPError as err:
+        try:
+            error_json = res.json()
+            message = error_json.get("detail", "An unknown error occurred.")
+        except Exception:
+            message = "An unexpected error occurred while scheduling the meeting."
+        flash(message, "danger")
+        return redirect(url_for('home'))
+
     except Exception as e:
+        flash("An internal error occurred. Please try again.", "danger")
         print("❌ Exception occurred:", e)
         traceback.print_exc()
-        flash(f"Error: {str(e)}")
         return redirect(url_for('home'))
 
     
