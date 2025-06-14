@@ -1,19 +1,85 @@
+# common/zoom_api.py
 import os
 import requests
+import psycopg2
+from datetime import datetime, timedelta
 from common.zoom_auth import get_server_token
 
+# Load environment variables
+# ✅ Define your managed Zoom users
+HOST_EMAILS = [
+    "meeting@6t3media.com",
+    "meeting_host@6t3media.com",
+    "meeting_host2@6t3media.com"
+]
 
-def create_zoom_meeting(payload, host_email):
-    
-    print("create_zoom_meeting called :")
-    token = get_server_token()
-    #print(f"token is inside function :{token}")
-    user_id = os.getenv("ZOOM_USER_ID")
+def is_host_available(host_email: str, start_time_iso: str, duration_minutes: int, postgres_url: str) -> bool:
+    start_time = datetime.fromisoformat(start_time_iso.replace("Z", "+00:00"))
+    end_time = start_time + timedelta(minutes=duration_minutes)
 
+    try:
+        conn = psycopg2.connect(postgres_url)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT start_time, duration FROM scheduled_meetings
+            WHERE host_email = %s
+            AND start_time >= %s - interval '15 minutes'
+            AND start_time <= %s + interval '15 minutes'
+        """, (host_email, start_time, end_time))
+        rows = cursor.fetchall()
+    except Exception as e:
+        print(f"[❌ DB error in is_host_available]: {e}")
+        raise
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
+    for mt_start, mt_duration in rows:
+        mt_end = mt_start + timedelta(minutes=mt_duration)
+        if not (end_time <= mt_start or start_time >= mt_end):  # overlap
+            return False
+    return True
+
+
+def find_available_host(start_time_iso: str, duration_minutes: int, postgres_url: str):
+    start_time = datetime.fromisoformat(start_time_iso.replace("Z", "+00:00"))
+    end_time = start_time + timedelta(minutes=duration_minutes)
+
+    try:
+        conn = psycopg2.connect(postgres_url)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT host_email, start_time, duration FROM scheduled_meetings
+            WHERE start_time >= %s - interval '15 minutes'
+            AND start_time <= %s + interval '15 minutes'
+        """, (start_time, end_time))
+        rows = cursor.fetchall()
+    except Exception as e:
+        print(f"[❌ DB error in find_available_host]: {e}")
+        raise
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
+    busy_hosts = set()
+    for host_email, mt_start, mt_duration in rows:
+        if host_email not in HOST_EMAILS:
+            continue  # ignore unknown entries
+        mt_end = mt_start + timedelta(minutes=mt_duration)
+        if not (end_time <= mt_start or start_time >= mt_end):
+            busy_hosts.add(host_email)
+
+    for host in HOST_EMAILS:
+        if host not in busy_hosts:
+            return host
+    return None
+
+
+def create_zoom_meeting(payload: dict, host_email: str) -> dict:
     if not host_email:
         raise ValueError("host_email is required for Zoom meeting creation.")
-    if not user_id:
-        raise ValueError("ZOOM_USER_ID is not set in environment variables.")
+
+    token = get_server_token()
     if not token:
         raise ValueError("Failed to get Zoom API access token.")
 
@@ -22,30 +88,30 @@ def create_zoom_meeting(payload, host_email):
         "Content-Type": "application/json"
     }
 
-    # Set default Zoom meeting settings
     payload.setdefault("settings", {
         "auto_recording": "cloud",
-        "join_before_host": True,
+        "join_before_host": False,
+        "waiting_room": True,
         "mute_upon_entry": True,
-        "approval_type": 0
+        "approval_type": 0,
+        "registration_type": 1
     })
 
     try:
-        print(f"user_id is inside try :{user_id}")
-        print(f"Using host_email: {host_email}")
         response = requests.post(
-            f"https://api.zoom.us/v2/users/me/meetings",
+            f"https://api.zoom.us/v2/users/{host_email}/meetings",
             headers=headers,
-            json=payload
+            json=payload,
+            timeout=10
         )
-        print(f"🔁 Response Status Code:{response.status_code}")
-        print(f"🔁 Response Body:{response.text}")
-
-        response.raise_for_status()  # Will raise an HTTPError for non-2xx status
-
+        response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        # Log detailed error message from Zoom API
-        error_message = f"Zoom API Error: {response.status_code} - {response.text}" if response else str(e)
-        raise Exception(error_message)
+        msg = f"[❌ Zoom API error for host '{host_email}']: {str(e)}"
+        try:
+            msg += f" | Response: {response.text}"
+        except:
+            pass
+        print(msg)
+        raise Exception(msg)
 
     return response.json()
