@@ -4,6 +4,7 @@ import requests
 import psycopg2
 from datetime import datetime, timedelta
 from common.zoom_auth import get_server_token
+from datetime import timezone
 
 # Load environment variables
 # ✅ Define your managed Zoom users
@@ -35,8 +36,9 @@ def is_host_available(host_email: str, start_time_iso: str, duration_minutes: in
         if 'conn' in locals(): conn.close()
 
     for mt_start, mt_duration in rows:
+        mt_start = mt_start.replace(tzinfo=timezone.utc)
         mt_end = mt_start + timedelta(minutes=mt_duration)
-        if not (end_time <= mt_start or start_time >= mt_end):  # overlap
+        if not (end_time <= mt_start or start_time >= mt_end):
             return False
     return True
 
@@ -64,7 +66,8 @@ def find_available_host(start_time_iso: str, duration_minutes: int, postgres_url
     busy_hosts = set()
     for host_email, mt_start, mt_duration in rows:
         if host_email not in HOST_EMAILS:
-            continue  # ignore unknown entries
+            continue
+        mt_start = mt_start.replace(tzinfo=timezone.utc)
         mt_end = mt_start + timedelta(minutes=mt_duration)
         if not (end_time <= mt_start or start_time >= mt_end):
             busy_hosts.add(host_email)
