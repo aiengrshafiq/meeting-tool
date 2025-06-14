@@ -5,6 +5,8 @@ from datetime import datetime
 from .db import Base, SessionLocal
 import os, json
 import httpx, psycopg2
+import requests
+
 
 from dotenv import load_dotenv
 auth_bp = Blueprint("auth", __name__)
