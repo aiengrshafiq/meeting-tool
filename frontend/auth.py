@@ -115,12 +115,12 @@ def meetings():
 def cancel_meeting():
     if session.get("user_role") != "admin":
         flash("Unauthorized access", "danger")
-        return redirect(url_for("auth.dashboard"))
+        return redirect(url_for("auth.meetings"))
 
     meeting_id = request.form.get("meeting_id")
     if not meeting_id:
         flash("Missing meeting ID", "danger")
-        return redirect(url_for("auth.dashboard"))
+        return redirect(url_for("auth.meetings"))
 
     try:
         # Call FastAPI endpoint to cancel Zoom meeting
@@ -130,4 +130,4 @@ def cancel_meeting():
     except requests.exceptions.RequestException as e:
         flash(f"❌ Failed to cancel meeting: {str(e)}", "danger")
 
-    return redirect(url_for("auth.dashboard"))
+    return redirect(url_for("auth.meetings"))
