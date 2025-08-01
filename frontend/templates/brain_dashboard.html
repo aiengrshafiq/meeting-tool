@@ -37,7 +37,8 @@
                             </td>
                             <td>
                                 <!-- THE FIX: This now links to the detail page -->
-                                <a href="{{ url_for('app.brain_meeting_detail', meeting_id=meeting.meeting_id) }}" class="btn btn-sm btn-outline-primary">View Details</a>
+                                
+                                <a href="{{ url_for('brain_meeting_detail', meeting_id=meeting.meeting_id) }}" class="btn btn-sm btn-outline-primary">View Details</a>
                             </td>
                         </tr>
                         {% else %}
