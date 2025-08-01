@@ -1,0 +1,75 @@
+<!-- frontend/templates/meeting_detail.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <a href="{{ url_for('app.brain_dashboard') }}" class="btn btn-outline-secondary mb-3">
+        &larr; Back to Dashboard
+    </a>
+
+    <h1 class="mb-3">Meeting Details: {{ details.meetingId }}</h1>
+    <p class="text-muted">Processed on: {{ details.dateTime | replace("T", " ") | split(".")[0] }} UTC</p>
+
+    <div class="row">
+        <!-- Left Column: Classification & Metadata -->
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>Classification</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item"><strong>Subsidiary:</strong> {{ details.classification.subsidiary }}</li>
+                    <li class="list-group-item"><strong>Department:</strong> {{ details.classification.department }}</li>
+                    <li class="list-group-item"><strong>Meeting Type:</strong> {{ details.classification.meeting_type }}</li>
+                    <li class="list-group-item"><strong>Sub-Type:</strong> {{ details.classification.meeting_subtype }}</li>
+                </ul>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>Participants</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% for participant in details.participants %}
+                        <li class="list-group-item">{{ participant }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Right Column: Decisions & Tags -->
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>Key Decisions</h5>
+                </div>
+                <div class="card-body">
+                    {% if details.classification.key_decisions %}
+                        <ul>
+                        {% for decision in details.classification.key_decisions %}
+                            <li>{{ decision }}</li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted">No key decisions were identified.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>Tags</h5>
+                </div>
+                <div class="card-body">
+                    {% if details.classification.tags %}
+                        {% for tag in details.classification.tags %}
+                            <span class="badge bg-primary fs-6 me-2 mb-2">{{ tag }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No tags were identified.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

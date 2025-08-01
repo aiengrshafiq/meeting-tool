@@ -3,7 +3,8 @@ import logging
 from sqlalchemy.orm import Session
 from models import TrainingQueue, MeetingLog, User
 
-def add_to_training_queue(db: Session, classification_result: dict, meeting_id: str, participants: list):
+
+def add_to_training_queue(db: Session, classification_result: dict, meeting_id: str, users: list[User]):
     """
     Checks for coaching-related tags and adds entries to the training queue in PostgreSQL.
     """
@@ -27,21 +28,16 @@ def add_to_training_queue(db: Session, classification_result: dict, meeting_id: 
         # For now, this check might fail. We will fix this in a later step.
         return
 
-    # For each participant, create a training queue entry for each relevant tag
-    for participant_name in participants:
-        # TODO: This is a placeholder. In a real system, you would look up the user's ID.
-        # For now, we'll assume a user with ID 1 exists for testing.
-        user = db.query(User).filter(User.id == 1).first() # Dummy lookup
-        
-        if user:
-            for tag in found_tags:
-                new_training_entry = TrainingQueue(
-                    meeting_id=meeting_log.id,
-                    participant_user_id=user.id,
-                    coaching_category=tag.replace("#", "") # Store without the hashtag
-                )
-                db.add(new_training_entry)
-                logging.info(f"Staged training entry for '{participant_name}' with category '{tag}'")
+    # For each internal user found, create a training queue entry
+    for user in users:
+        for tag in found_tags:
+            new_training_entry = TrainingQueue(
+                meeting_id=meeting_id,
+                participant_user_id=user.id,
+                coaching_category=tag.replace("#", "")
+            )
+            db.add(new_training_entry)
+            logging.info(f"Staged training entry for user ID '{user.id}' with category '{tag}'")
     
     # The commit will happen in the main __init__.py file
     return True

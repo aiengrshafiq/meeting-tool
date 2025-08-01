@@ -5,6 +5,11 @@ import os
 from dotenv import load_dotenv
 from frontend.auth import auth_bp
 
+from models import MeetingLog
+from sqlalchemy import desc
+import json
+from azure.storage.blob import BlobServiceClient
+import os
 
 load_dotenv()
 
@@ -92,6 +97,60 @@ def schedule():
         print("❌ Exception occurred:", e)
         traceback.print_exc()
         return redirect(url_for('home'))
+
+
+@app.route("/brain")
+def brain_dashboard():
+    if not session.get("user_id"):
+        return redirect(url_for("auth.login"))
+
+    db = SessionLocal()
+    try:
+        meetings = db.query(MeetingLog).filter(
+            MeetingLog.enriched_output_path != None
+        ).order_by(desc(MeetingLog.meeting_time)).all()
+        
+        return render_template("brain_dashboard.html", meetings=meetings)
+    finally:
+        db.close()
+
+# --- NEW ROUTE FOR MEETING DETAILS ---
+@app.route("/brain/meeting/<meeting_id>")
+def brain_meeting_detail(meeting_id):
+    if not session.get("user_id"):
+        return redirect(url_for("auth.login"))
+
+    db = SessionLocal()
+    try:
+        # 1. Get the meeting record from the database
+        meeting = db.query(MeetingLog).filter(MeetingLog.meeting_id == meeting_id).first()
+        if not meeting or not meeting.enriched_output_path:
+            flash("Meeting details not found.", "danger")
+            return redirect(url_for("app.brain_dashboard"))
+
+        # 2. Fetch the enriched JSON file from Blob Storage
+        p2_storage_conn_str = os.getenv("P2_STORAGE_CONNECTION_STRING")
+        if not p2_storage_conn_str:
+            flash("Storage connection for Phase 2 is not configured.", "danger")
+            return redirect(url_for("app.brain_dashboard"))
+            
+        blob_service_client = BlobServiceClient.from_connection_string(p2_storage_conn_str)
+        blob_client = blob_service_client.get_blob_client(
+            container="enriched-output-phase2", 
+            blob=meeting.enriched_output_path
+        )
+        
+        downloader = blob_client.download_blob()
+        blob_content = downloader.readall()
+        meeting_details = json.loads(blob_content)
+        
+        return render_template("meeting_detail.html", details=meeting_details)
+
+    except Exception as e:
+        flash(f"An error occurred: {e}", "danger")
+        return redirect(url_for("app.brain_dashboard"))
+    finally:
+        db.close()
 
     
 if __name__ == "__main__":

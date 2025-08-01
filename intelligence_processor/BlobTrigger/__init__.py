@@ -10,7 +10,8 @@ from azure.storage.blob import BlobServiceClient
 # Import our brain modules
 from brain import classifier, queue_manager, vectorizer
 from frontend.db import SessionLocal
-from models import MeetingLog # Only need MeetingLog here now
+
+from models import MeetingLog, ScheduledMeeting, User
 
 def main(blob: func.InputStream):
     logging.info("--- INTELLIGENCE BRAIN TRIGGERED ---")
@@ -27,11 +28,35 @@ def main(blob: func.InputStream):
         logging.info("Successfully read blob content.")
         
         # --- 2. CLASSIFY ---
-        participants_list = ["Syed Owais", "Rain"] # Placeholder
+        db_session = SessionLocal()
+        # --- FETCH REAL PARTICIPANTS ---
+        participants_list = []
+        user_list = [] # To store User objects for the training queue
+        
+        scheduled_meeting = db_session.query(ScheduledMeeting).filter(ScheduledMeeting.meeting_id == meeting_id).first()
+        if scheduled_meeting and scheduled_meeting.participants:
+            participant_emails = json.loads(scheduled_meeting.participants)
+            logging.info(f"Found invited participants: {participant_emails}")
+            
+            for email in participant_emails:
+                # Check if the participant is a registered internal user
+                user = db_session.query(User).filter(User.email == email).first()
+                if user:
+                    # Internal user
+                    participants_list.append(f"{user.email} (Internal)")
+                    user_list.append(user)
+                else:
+                    # External guest
+                    participants_list.append(f"{email} (External)")
+        else:
+            logging.warning(f"No scheduled meeting or participants found for {meeting_id}. Using placeholder.")
+            participants_list = ["Syed Owais", "Rain"] # Fallback
+
         classification_result = classifier.classify_transcript(
             transcript_text=transcript_content, 
             participants=participants_list
         )
+
         if "error" in classification_result:
             raise Exception(f"Classification failed: {classification_result['error']}")
         logging.info(f"✅ Classification Result: {classification_result}")
@@ -53,7 +78,7 @@ def main(blob: func.InputStream):
         output_blob_path = f"{year}/{subsidiary}/{meeting_type}/{file_friendly_id}"
         
         # --- 5. UPDATE DATABASE ---
-        db_session = SessionLocal()
+        # db_session = SessionLocal()
         
         # Find the existing log created by the webhook
         meeting_log_to_update = db_session.query(MeetingLog).filter(MeetingLog.meeting_id == meeting_id).first()
@@ -87,7 +112,8 @@ def main(blob: func.InputStream):
             )
             db_session.add(meeting_log_to_update)
 
-        queue_manager.add_to_training_queue(db_session, classification_result, meeting_id, participants_list)
+        #queue_manager.add_to_training_queue(db_session, classification_result, meeting_id, participants_list)
+        queue_manager.add_to_training_queue(db_session, classification_result, meeting_id, user_list)
         
         db_session.commit()
         logging.info("✅ Database records committed successfully.")
