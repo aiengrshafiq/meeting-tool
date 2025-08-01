@@ -183,3 +183,20 @@ temp_pdfs/
 crawler/temp/
 crawler/crawler/
 # data/
+
+deploy-phase2.ps1
+.deploy-phase2.ps1
+deploy-phase2.psl
+.deploy-phase2.psl
+
+configure-poc.ps1
+.configure-poc.ps1
+
+configure-poc-final.ps1
+.configure-poc-final.ps1
+
+redeploy-function.ps1
+
+.vscode/
+
+intelligence_processor/.venv/

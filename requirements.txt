@@ -21,6 +21,7 @@ httpx
 # PostgreSQL
 psycopg2-binary
 sqlalchemy
+alembic
 
 # Tools & Utilities
 python-multipart

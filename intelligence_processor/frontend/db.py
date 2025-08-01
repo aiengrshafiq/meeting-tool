@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 import os
 
 # It's better to import Base from your models file to ensure everything is linked
-from models import Base 
+from models import Base
 
 DATABASE_URL = os.getenv("POSTGRES_URL")
 

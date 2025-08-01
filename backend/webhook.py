@@ -1,215 +1,135 @@
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
-import os, json, hmac, hashlib, tempfile
-import httpx, psycopg2
+# backend/webhook.py
+from fastapi import APIRouter, Request, Depends, Response
+from sqlalchemy.orm import Session
+import os, json, hmac, hashlib, tempfile, httpx, traceback
 from pathlib import Path
-from dotenv import load_dotenv
 from datetime import datetime
+
+# NEW IMPORT FOR PHASE 2 TRIGGER
+from azure.storage.blob import BlobServiceClient
+
+# REFACTOR: Import models and db session
+from models import MeetingProcessingLog, MeetingLog
+from frontend.db import get_db
 
 from common.blob_storage import upload_file_to_blob
 from common.transcriber import transcribe_from_blob_url
 from common.summarizer import summarize_transcript
 from common.emailer import send_summary_email
-import traceback
 
-load_dotenv()
 router = APIRouter()
 
 ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET")
-POSTGRES_URL = os.getenv("POSTGRES_URL")
 
-if not ZOOM_WEBHOOK_SECRET or not POSTGRES_URL:
-    raise ValueError("Missing required environment variables")
-
-# --- PostgreSQL helpers for deduplication ---
-def is_meeting_processed(meeting_id: str):
-    try:
-        conn = psycopg2.connect(POSTGRES_URL)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS meeting_processing_log (
-                meeting_id VARCHAR PRIMARY KEY,
-                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("SELECT meeting_id FROM meeting_processing_log WHERE meeting_id = %s", (meeting_id,))
-        exists = cursor.fetchone() is not None
-        cursor.close()
-        conn.close()
-        return exists
-    except Exception as e:
-        print(f"[❌ DB Check Error] {e}")
-        return False
-
-def mark_meeting_as_processed(meeting_id: str):
-    try:
-        conn = psycopg2.connect(POSTGRES_URL)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO meeting_processing_log (meeting_id, processed_at)
-            VALUES (%s, %s)
-            ON CONFLICT (meeting_id) DO NOTHING
-        """, (meeting_id, datetime.utcnow()))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        print(f"[📌 Marked as processed] Meeting {meeting_id}")
-    except Exception as e:
-        print(f"[❌ DB Write Error] {e}")
-
+# This local file dependency is a point of failure, but kept for now.
 def load_participants(meeting_id):
     path = Path(f"data/participants_{meeting_id}.json")
     if path.exists():
         with open(path, "r") as f:
             data = json.load(f)
-            return (
-                data.get("emails", []),
-                data.get("created_by_email", "unknown"),
-                data.get("form_host_email", None)  # ✅ NEW
-            )
+        return (
+            data.get("emails", []),
+            data.get("created_by_email", "unknown"),
+            data.get("form_host_email", None)
+        )
     return [], "unknown", None
 
-def save_meeting_to_postgres(meeting_id, host_email, summary, transcript, recipients, meeting_time, created_by_email,recording_full_url):
-    try:
-        conn = psycopg2.connect(POSTGRES_URL)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS meeting_logs (
-                meeting_id VARCHAR PRIMARY KEY,
-                host_email VARCHAR,
-                summary TEXT,
-                transcript TEXT,
-                recipients TEXT,
-                meeting_time TIMESTAMP,
-                created_by_email VARCHAR,
-                recording_full_url TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            INSERT INTO meeting_logs (meeting_id, host_email, summary, transcript,recipients, meeting_time, created_by_email,recording_full_url)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (meeting_id) DO NOTHING
-        """, (
-            meeting_id,
-            host_email,
-            summary,
-            transcript,
-            json.dumps(recipients),
-            meeting_time,
-            created_by_email,
-            recording_full_url
-
-        ))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        print(f"[📝 Saved to DB] host_email={host_email}, created_by={created_by_email}")
-        print(f"[✅ Saved to PostgreSQL] Meeting: {meeting_id}")
-    except Exception as e:
-        print(f"[❌ PostgreSQL Error] {e}")
-        traceback.print_exc()
-
 @router.post("/api/zoom/webhook")
-async def zoom_webhook(request: Request):
+async def zoom_webhook(request: Request, db: Session = Depends(get_db)):
     try:
         body = await request.body()
         payload = json.loads(body)
         event = payload.get("event")
-        print(f"[🧩 EVENT RECEIVED] {event}")
-        print(f"[📦 PAYLOAD] {json.dumps(payload, indent=2)}")
 
-        # 🔒 Zoom webhook URL validation
         if event == "endpoint.url_validation":
             plain_token = payload["payload"]["plainToken"]
-            encrypted_token = hmac.new(
-                ZOOM_WEBHOOK_SECRET.encode(),
-                plain_token.encode(),
-                hashlib.sha256
-            ).hexdigest()
-            return JSONResponse(content={
-                "plainToken": plain_token,
-                "encryptedToken": encrypted_token
-            })
+            encrypted_token = hmac.new(ZOOM_WEBHOOK_SECRET.encode(), plain_token.encode(), hashlib.sha256).hexdigest()
+            return {"plainToken": plain_token, "encryptedToken": encrypted_token}
 
-        # 🎯 Consolidate all relevant events
-        if event not in ["recording.completed", "meeting.ended"]:
-            print(f"[⚠️ Ignored event] {event}")
-            return JSONResponse(content={"status": "ignored"}, status_code=200)
+        if event != "recording.completed":
+            return Response(status_code=204)
 
         recording = payload.get("payload", {}).get("object", {})
         meeting_id = str(recording.get("id"))
-        meeting_time = recording.get("start_time")
-        download_files = recording.get("recording_files", [])
-        host_email = recording.get("host_email")
 
-        # ✅ Deduplication check
-        if is_meeting_processed(meeting_id):
+        processed_log = db.query(MeetingProcessingLog).filter_by(meeting_id=meeting_id).first()
+        if processed_log:
             print(f"[🛑 Already processed] Skipping meeting {meeting_id}")
-            return JSONResponse(content={"status": "duplicate skipped"}, status_code=200)
-
-        uploaded_files = []
-
-        for file in download_files:
-            if file["file_type"] not in ["MP4", "M4A"]:
-                continue
-
-            download_url = file["download_url"]
-            filename = f"{file['file_type'].lower()}_{file['id']}.{file['file_type'].lower()}"
-            download_token = payload.get("download_token")
-            if not download_token:
-                raise ValueError("Zoom download_token is missing")
-            full_url = f"{download_url}?access_token={download_token}"
-
+            return {"status": "duplicate skipped"}
+        
+        audio_file = next((f for f in recording.get("recording_files", []) if f["file_type"] == "M4A"), None)
+        if not audio_file:
+            print(f"[⚠️ No M4A audio file found] Skipping meeting {meeting_id}")
+            return {"status": "no audio file"}
             
+        download_url = audio_file["download_url"]
+        filename = f"audio_{audio_file['id']}.m4a"
+        download_token = payload.get("download_token")
+        full_url = f"{download_url}?access_token={download_token}"
 
-            tmp = tempfile.NamedTemporaryFile(delete=False)
-            try:
-                async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
-                    r = await client.get(full_url, headers={"User-Agent": "Zoom-Webhook-Bot"})
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".m4a")
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=90.0) as client:
+                async with client.stream("GET", full_url) as r:
                     r.raise_for_status()
-                    tmp.write(r.content)
+                    async for chunk in r.aiter_bytes():
+                        tmp.write(chunk)
+            
+            # This uploads the AUDIO to the PHASE 1 storage
+            blob_url = upload_file_to_blob(meeting_id, tmp.name, filename) 
+            
+            transcript = transcribe_from_blob_url(blob_url)
+            summary = summarize_transcript(transcript)
+            recipients, created_by_email, form_host_email = load_participants(meeting_id)
+            
+            effective_host_email = form_host_email or recording.get("host_email")
+            if not recipients:
+                recipients = [effective_host_email]
+            if effective_host_email not in recipients:
+                recipients.append(effective_host_email)
 
-                blob_url = upload_file_to_blob(meeting_id, tmp.name, filename)
-                uploaded_files.append(blob_url)
+            for email in recipients:
+                send_summary_email(
+                    to_email=email, subject=f"📝 Summary for Zoom Meeting {meeting_id}",
+                    summary_text=summary, transcript_text=transcript
+                )
 
-                recording_full_url = blob_url
+            new_log = MeetingLog(
+                meeting_id=meeting_id, host_email=effective_host_email, summary=summary,
+                transcript=transcript, recipients=json.dumps(recipients), 
+                meeting_time=datetime.fromisoformat(recording["start_time"].replace("Z", "+00:00")),
+                created_by_email=created_by_email, recording_full_url=blob_url
+            )
+            db.add(new_log)
+            
+            new_proc_log = MeetingProcessingLog(meeting_id=meeting_id)
+            db.add(new_proc_log)
+            
+            db.commit()
+            print(f"[✅ Phase 1] DB records for {meeting_id} committed.")
 
-                transcript = transcribe_from_blob_url(blob_url)
-                summary = summarize_transcript(transcript)
-                recipients, created_by_email, form_host_email = load_participants(meeting_id)
-                if not recipients:
-                    recipients = [host_email]
+            # --- TRIGGER PHASE 2 ---
+            # Now, upload the final transcript to the Phase 2 storage to trigger the Brain
+            try:
+                p2_storage_conn_str = os.getenv("P2_STORAGE_CONNECTION_STRING")
+                if p2_storage_conn_str:
+                    blob_service_client = BlobServiceClient.from_connection_string(p2_storage_conn_str)
+                    # The path will be the unique Zoom ID, e.g., "88387737580/transcript.txt"
+                    blob_path = f"{meeting_id}/transcript.txt"
+                    blob_client = blob_service_client.get_blob_client(container="raw-transcripts-phase2", blob=blob_path)
+                    blob_client.upload_blob(transcript.encode('utf-8'), overwrite=True)
+                    print(f"[✅ Phase 2 Trigger] Uploaded transcript to '{blob_path}' to start intelligence processing.")
+                else:
+                    print("[⚠️ Phase 2 Trigger] P2_STORAGE_CONNECTION_STRING not set. Skipping trigger.")
+            except Exception as e:
+                print(f"[❌ Phase 2 Trigger] Blob Upload Error: {e}")
+        finally:
+            tmp.close()
+            os.remove(tmp.name)
 
-                if form_host_email and form_host_email not in recipients:
-                    recipients.append(form_host_email)
-
-                for email in recipients:
-                    send_summary_email(
-                        to_email=email,
-                        to_name="Participant",
-                        subject=f"📝 Summary for Zoom Meeting {meeting_id}",
-                        summary_text=summary,
-                        transcript_text=transcript
-                    )
-
-                
-
-                effective_host_email = form_host_email or host_email
-                save_meeting_to_postgres(meeting_id, effective_host_email, summary, transcript, recipients, meeting_time,created_by_email,recording_full_url)
-                mark_meeting_as_processed(meeting_id)
-
-            finally:
-                tmp.close()
-                os.remove(tmp.name)
-
-        return JSONResponse({
-            "status": "processed",
-            "meeting_id": meeting_id,
-            "files_uploaded": uploaded_files
-        })
+        return {"status": "processed", "meeting_id": meeting_id}
 
     except Exception as e:
-        print(f"[❌ Top-level Error] {e}")
+        print(f"[❌ Top-level Error in Webhook] {e}")
         traceback.print_exc()
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return {"error": str(e)}, 500

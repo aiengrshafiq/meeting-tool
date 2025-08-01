@@ -1,3 +1,4 @@
+#common\blob_storage.py
 import os
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
 from datetime import datetime, timedelta
