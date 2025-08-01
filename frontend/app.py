@@ -108,16 +108,27 @@ def brain_dashboard():
 
 @app.route("/brain/meeting/<meeting_id>")
 def brain_meeting_detail(meeting_id):
+    if not session.get("user_id"):
+        return redirect(url_for("auth.login"))
+
     db = SessionLocal()
     try:
+        # 1. Get the meeting record from the database
         meeting = db.query(MeetingLog).filter(MeetingLog.meeting_id == meeting_id).first()
-        if not meeting or not meeting.enriched_output_path:
-            flash("Meeting details not found.", "danger")
+        if not meeting:
+            # More specific error
+            flash(f"Database record for Meeting ID '{meeting_id}' not found.", "danger")
+            return redirect(url_for("brain_dashboard"))
+        if not meeting.enriched_output_path:
+            # More specific error
+            flash(f"Meeting ID '{meeting_id}' exists but has no processed output file path.", "warning")
             return redirect(url_for("brain_dashboard"))
 
+        # 2. Fetch the enriched JSON file from Blob Storage
         p2_storage_conn_str = os.getenv("P2_STORAGE_CONNECTION_STRING")
         if not p2_storage_conn_str:
-            flash("Storage connection for Phase 2 is not configured.", "danger")
+            # This is the most likely error
+            flash("CRITICAL ERROR: The P2_STORAGE_CONNECTION_STRING environment variable is not configured for the application.", "danger")
             return redirect(url_for("brain_dashboard"))
             
         blob_service_client = BlobServiceClient.from_connection_string(p2_storage_conn_str)
@@ -133,7 +144,7 @@ def brain_meeting_detail(meeting_id):
         return render_template("meeting_detail.html", details=meeting_details)
 
     except Exception as e:
-        flash(f"An error occurred: {e}", "danger")
+        flash(f"An unexpected error occurred while fetching details for meeting {meeting_id}: {e}", "danger")
         return redirect(url_for("brain_dashboard"))
     finally:
         db.close()
