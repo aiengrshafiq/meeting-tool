@@ -2,12 +2,14 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container mt-4">
-    <a href="{{ url_for('app.brain_dashboard') }}" class="btn btn-outline-secondary mb-3">
+    <a href="{{ url_for('brain_dashboard') }}" class="btn btn-outline-secondary mb-3">
         &larr; Back to Dashboard
     </a>
 
     <h1 class="mb-3">Meeting Details: {{ details.meetingId }}</h1>
-    <p class="text-muted">Processed on: {{ details.dateTime | replace("T", " ") | split(".")[0] }} UTC</p>
+    
+    <!-- THE FIX: This line now uses correct syntax to format the date string -->
+    <p class="text-muted">Processed on: {{ details.dateTime.split('.')[0].replace('T', ' ') }} UTC</p>
 
     <div class="row">
         <!-- Left Column: Classification & Metadata -->
