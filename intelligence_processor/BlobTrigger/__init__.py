@@ -10,7 +10,6 @@ from azure.storage.blob import BlobServiceClient
 # Import our brain modules
 from brain import classifier, queue_manager, vectorizer
 from frontend.db import SessionLocal
-
 from models import MeetingLog, ScheduledMeeting, User
 
 def main(blob: func.InputStream):
@@ -27,11 +26,11 @@ def main(blob: func.InputStream):
         transcript_content = blob.read().decode('utf-8')
         logging.info("Successfully read blob content.")
         
-        # --- 2. CLASSIFY ---
         db_session = SessionLocal()
-        # --- FETCH REAL PARTICIPANTS ---
-        participants_list = []
-        user_list = [] # To store User objects for the training queue
+        
+        # --- 2. FETCH REAL PARTICIPANTS FROM DATABASE ---
+        all_participants_list = []
+        internal_user_list = [] # A list of User objects
         
         scheduled_meeting = db_session.query(ScheduledMeeting).filter(ScheduledMeeting.meeting_id == meeting_id).first()
         if scheduled_meeting and scheduled_meeting.participants:
@@ -39,53 +38,38 @@ def main(blob: func.InputStream):
             logging.info(f"Found invited participants: {participant_emails}")
             
             for email in participant_emails:
-                # Check if the participant is a registered internal user
                 user = db_session.query(User).filter(User.email == email).first()
                 if user:
-                    # Internal user
-                    participants_list.append(f"{user.email} (Internal)")
-                    user_list.append(user)
+                    all_participants_list.append(f"{user.email} (Internal)")
+                    internal_user_list.append(user) # Add the full user object
                 else:
-                    # External guest
-                    participants_list.append(f"{email} (External)")
+                    all_participants_list.append(f"{email} (External)")
         else:
             logging.warning(f"No scheduled meeting or participants found for {meeting_id}. Using placeholder.")
-            participants_list = ["Syed Owais", "Rain"] # Fallback
+            all_participants_list = ["Syed Owais", "Rain"] # Fallback
 
+        # --- 3. CLASSIFY ---
         classification_result = classifier.classify_transcript(
             transcript_text=transcript_content, 
-            participants=participants_list
+            participants=all_participants_list
         )
-
         if "error" in classification_result:
             raise Exception(f"Classification failed: {classification_result['error']}")
         logging.info(f"✅ Classification Result: {classification_result}")
 
-        # --- 3. VECTORIZE ---
+        # --- 4. PREPARE FINAL OUTPUT PATH ---
         current_utc_time = datetime.now(timezone.utc).isoformat()
-        vectorizer.vectorize_and_save(
-            transcript_text=transcript_content,
-            classification_result=classification_result,
-            meeting_id=meeting_id,
-            meeting_date=current_utc_time
-        )
-        
-        # --- 4. PREPARE FINAL OUTPUT AND PATH ---
         year = datetime.now(timezone.utc).strftime("%Y")
         subsidiary = classification_result.get("subsidiary", "UnknownSubsidiary").replace(" ", "")
         meeting_type = classification_result.get("meeting_type", "UnknownType").replace(" ", "")
         file_friendly_id = f"{current_utc_time.split('T')[0]}_{meeting_id}.json"
         output_blob_path = f"{year}/{subsidiary}/{meeting_type}/{file_friendly_id}"
-        
+
         # --- 5. UPDATE DATABASE ---
-        # db_session = SessionLocal()
-        
-        # Find the existing log created by the webhook
         meeting_log_to_update = db_session.query(MeetingLog).filter(MeetingLog.meeting_id == meeting_id).first()
         
         if meeting_log_to_update:
             logging.info(f"Found existing MeetingLog for {meeting_id}. Updating with AI metadata.")
-            # Update the record with the new AI fields
             meeting_log_to_update.subsidiary = classification_result.get("subsidiary")
             meeting_log_to_update.department = classification_result.get("department")
             meeting_log_to_update.meeting_type = classification_result.get("meeting_type")
@@ -94,36 +78,30 @@ def main(blob: func.InputStream):
             meeting_log_to_update.key_decisions = classification_result.get("key_decisions")
             meeting_log_to_update.enriched_output_path = output_blob_path
         else:
-            # This is a fallback in case the webhook failed to create the record
-            logging.warning(f"No existing MeetingLog found for {meeting_id}. Creating a new one.")
-            meeting_log_to_update = MeetingLog(
-                meeting_id=meeting_id,
-                summary="Summary to be generated.",
-                transcript=transcript_content,
-                recipients=json.dumps(participants_list),
-                meeting_time=datetime.fromisoformat(current_utc_time),
-                subsidiary=classification_result.get("subsidiary"),
-                department=classification_result.get("department"),
-                meeting_type=classification_result.get("meeting_type"),
-                meeting_subtype=classification_result.get("meeting_subtype"),
-                tags=classification_result.get("tags"),
-                key_decisions=classification_result.get("key_decisions"),
-                enriched_output_path=output_blob_path
-            )
-            db_session.add(meeting_log_to_update)
+            logging.error(f"CRITICAL: No existing MeetingLog found for {meeting_id}. Cannot proceed with DB update.")
+            # We will stop here if the initial record doesn't exist.
+            raise Exception(f"MeetingLog for {meeting_id} not found.")
 
-        #queue_manager.add_to_training_queue(db_session, classification_result, meeting_id, participants_list)
-        queue_manager.add_to_training_queue(db_session, classification_result, meeting_id, user_list)
+        # THE FIX: Pass the meeting_log object and the list of internal users
+        queue_manager.add_to_training_queue(db_session, classification_result, meeting_log_to_update, internal_user_list)
         
         db_session.commit()
         logging.info("✅ Database records committed successfully.")
 
-        # --- 6. UPLOAD FINAL JSON OUTPUT ---
+        # --- 6. VECTORIZE ---
+        vectorizer.vectorize_and_save(
+            transcript_text=transcript_content,
+            classification_result=classification_result,
+            meeting_id=meeting_id,
+            meeting_date=current_utc_time
+        )
+
+        # --- 7. UPLOAD FINAL JSON OUTPUT ---
         final_json_output = {
           "meetingId": meeting_id,
           "dateTime": current_utc_time,
           "classification": classification_result,
-          "participants": participants_list,
+          "participants": all_participants_list,
           "transcript_blob_path": blob.name
         }
         logging.info(f"Saving final JSON output to: {output_blob_path}")
