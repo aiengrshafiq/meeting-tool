@@ -10,7 +10,7 @@ from models import MeetingLog
 from sqlalchemy import desc
 import json
 from azure.storage.blob import BlobServiceClient
-# THE FIX: Changed from ".db" to "frontend.db"
+from azure.core.exceptions import ResourceNotFoundError # NEW IMPORT for specific errors
 from frontend.db import SessionLocal
 
 load_dotenv()
@@ -31,7 +31,6 @@ app.register_blueprint(auth_bp)
 
 @app.before_request
 def require_login():
-    # Allow access to the new brain routes if logged in
     if request.endpoint and 'static' not in request.endpoint and not session.get("user_id"):
         if request.endpoint not in ("auth.login", "auth.register"):
             return redirect(url_for("auth.login"))
@@ -50,12 +49,8 @@ def schedule():
     host_email = request.form['host_email']
     created_by_email = session.get("user_email")
     payload = {
-        "topic": topic,
-        "start_time": start_time,
-        "duration": duration,
-        "agenda": agenda,
-        "participants": participants,
-        "host_email": host_email,
+        "topic": topic, "start_time": start_time, "duration": duration,
+        "agenda": agenda, "participants": participants, "host_email": host_email,
         "created_by_email": created_by_email
     }
 
@@ -81,8 +76,7 @@ def schedule():
 
     except requests.exceptions.HTTPError as err:
         try:
-            error_json = res.json()
-            message = error_json.get("detail", "An unknown error occurred.")
+            message = res.json().get("detail", "An unknown error occurred.")
         except Exception:
             message = "An unexpected error occurred while scheduling the meeting."
         flash(message, "danger")
@@ -106,29 +100,19 @@ def brain_dashboard():
     finally:
         db.close()
 
+# --- FINAL, ROBUST VERSION OF THE DETAIL ROUTE ---
 @app.route("/brain/meeting/<meeting_id>")
 def brain_meeting_detail(meeting_id):
-    if not session.get("user_id"):
-        return redirect(url_for("auth.login"))
-
     db = SessionLocal()
     try:
-        # 1. Get the meeting record from the database
         meeting = db.query(MeetingLog).filter(MeetingLog.meeting_id == meeting_id).first()
-        if not meeting:
-            # More specific error
-            flash(f"Database record for Meeting ID '{meeting_id}' not found.", "danger")
-            return redirect(url_for("brain_dashboard"))
-        if not meeting.enriched_output_path:
-            # More specific error
-            flash(f"Meeting ID '{meeting_id}' exists but has no processed output file path.", "warning")
+        if not meeting or not meeting.enriched_output_path:
+            flash("Meeting details not found in the database.", "danger")
             return redirect(url_for("brain_dashboard"))
 
-        # 2. Fetch the enriched JSON file from Blob Storage
         p2_storage_conn_str = os.getenv("P2_STORAGE_CONNECTION_STRING")
         if not p2_storage_conn_str:
-            # This is the most likely error
-            flash("CRITICAL ERROR: The P2_STORAGE_CONNECTION_STRING environment variable is not configured for the application.", "danger")
+            flash("CRITICAL ERROR: P2_STORAGE_CONNECTION_STRING is not configured.", "danger")
             return redirect(url_for("brain_dashboard"))
             
         blob_service_client = BlobServiceClient.from_connection_string(p2_storage_conn_str)
@@ -137,14 +121,25 @@ def brain_meeting_detail(meeting_id):
             blob=meeting.enriched_output_path
         )
         
-        downloader = blob_client.download_blob()
-        blob_content = downloader.readall()
-        meeting_details = json.loads(blob_content)
-        
+        # This block now handles specific errors for better debugging
+        try:
+            blob_content = blob_client.download_blob().readall()
+            if not blob_content:
+                raise ValueError("Blob is empty.")
+            meeting_details = json.loads(blob_content)
+            
+        except ResourceNotFoundError:
+            flash(f"Error: The enriched output file was not found in storage at path: {meeting.enriched_output_path}", "danger")
+            return redirect(url_for("brain_dashboard"))
+        except (json.JSONDecodeError, ValueError) as e:
+            flash(f"Error parsing the meeting data file. It may be corrupted. Details: {e}", "danger")
+            return redirect(url_for("brain_dashboard"))
+            
         return render_template("meeting_detail.html", details=meeting_details)
 
     except Exception as e:
-        flash(f"An unexpected error occurred while fetching details for meeting {meeting_id}: {e}", "danger")
+        flash(f"An unexpected server error occurred: {e}", "danger")
+        traceback.print_exc() # Log the full error to the console
         return redirect(url_for("brain_dashboard"))
     finally:
         db.close()
