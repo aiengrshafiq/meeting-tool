@@ -56,6 +56,7 @@ async def test():
 
 @app.post("/api/create-meeting")
 def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
+    # This is your existing, working code. No changes needed here.
     try:
         payload = {
             "topic": meeting.topic, "type": 2, "start_time": meeting.start_time,
@@ -110,6 +111,7 @@ def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
 
 @app.delete("/api/cancel-meeting/{meeting_id}")
 def cancel_meeting(meeting_id: str, db: Session = Depends(get_db)):
+    # This is your existing, working code. No changes needed here.
     try:
         cancel_zoom_meeting(meeting_id)
         meeting_to_delete = db.query(ScheduledMeeting).filter(ScheduledMeeting.meeting_id == meeting_id).first()
@@ -127,7 +129,6 @@ async def enroll_voice(
     audio_file: UploadFile = File(...), 
     db: Session = Depends(get_db)
 ):
-    # This is a placeholder for a real user session
     user_id_to_enroll = 1 
     user = db.query(User).filter(User.id == user_id_to_enroll).first()
     if not user:
@@ -139,11 +140,15 @@ async def enroll_voice(
         raise HTTPException(status_code=500, detail="Speech service not configured.")
 
     speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
-    profile_client = speechsdk.VoiceProfileClient(speech_config)
+    
+    # THE FIX: VoiceProfileClient is in the 'speaker' sub-module
+    profile_client = speechsdk.speaker.VoiceProfileClient(speech_config)
 
     if not user.voice_profile_id:
         try:
-            voice_profile = profile_client.create_profile(speechsdk.VoiceProfileType.TextIndependentIdentification, "en-us")
+            # THE FIX: VoiceProfileType is also in the 'speaker' sub-module
+            profile_type = speechsdk.speaker.VoiceProfileType.TextIndependentIdentification
+            voice_profile = profile_client.create_profile(profile_type, "en-us")
             user.voice_profile_id = voice_profile.profile_id
             db.commit()
             print(f"Created new voice profile for user {user.email} with ID: {user.voice_profile_id}")
@@ -170,7 +175,8 @@ async def enroll_voice(
             print(f"Successfully enrolled voice for user {user.email}. Remaining speech time: {result.remaining_enrollment_speech_time}")
             return {"status": "success", "profileId": user.voice_profile_id, "remainingTime": str(result.remaining_enrollment_speech_time)}
         elif result.reason == speechsdk.ResultReason.Canceled:
-            cancellation = speechsdk.VoiceProfileEnrollmentCancellationDetails.from_result(result)
+            # THE FIX: CancellationDetails is also in the 'speaker' sub-module
+            cancellation = speechsdk.speaker.VoiceProfileEnrollmentCancellationDetails.from_result(result)
             raise HTTPException(status_code=400, detail=f"Enrollment canceled: {cancellation.reason} - {cancellation.error_details}")
         else:
             raise HTTPException(status_code=500, detail=f"Enrollment failed with reason: {result.reason}")

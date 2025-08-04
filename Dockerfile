@@ -19,9 +19,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# 3. Add a verification step to ensure the correct library is installed
-# This command will cause the build to FAIL if VoiceProfileClient is not found.
-RUN python -c "import azure.cognitiveservices.speech as speechsdk; assert hasattr(speechsdk, 'VoiceProfileClient'), 'CRITICAL ERROR: VoiceProfileClient not found in installed SDK. Build failed.'"
 
 # 4. Now copy the rest of the application code
 COPY . .
