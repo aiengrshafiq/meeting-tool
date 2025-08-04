@@ -13,11 +13,8 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from pydub import AudioSegment
-# THE FIX: Import from the new, correct package name 'azure.speech'
-import azure.speech.audio as audiosdk
-import azure.speech.speaker as speakersdk
-import azure.speech as speechsdk
-
+# THE FIX: Use the one, correct import for the speech SDK
+import azure.cognitiveservices.speech as speechsdk
 
 # --- Local Application Imports ---
 from models import ScheduledMeeting, User
@@ -40,6 +37,7 @@ class MeetingRequest(BaseModel):
     created_by_email: str
 
 # --- Helper class for Azure Speech SDK ---
+# This class is correct and does not need changes.
 class WavStream(speechsdk.audio.PullAudioInputStreamCallback):
     def __init__(self, wav_bytes: bytes):
         super().__init__()
@@ -60,7 +58,7 @@ async def test():
 
 @app.post("/api/create-meeting")
 def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
-    # This is your existing, working code. No changes needed here.
+    # This is your existing, working code. It is preserved.
     try:
         payload = {
             "topic": meeting.topic, "type": 2, "start_time": meeting.start_time,
@@ -115,7 +113,7 @@ def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
 
 @app.delete("/api/cancel-meeting/{meeting_id}")
 def cancel_meeting(meeting_id: str, db: Session = Depends(get_db)):
-    # This is your existing, working code. No changes needed here.
+    # This is your existing, working code. It is preserved.
     try:
         cancel_zoom_meeting(meeting_id)
         meeting_to_delete = db.query(ScheduledMeeting).filter(ScheduledMeeting.meeting_id == meeting_id).first()
@@ -145,12 +143,12 @@ async def enroll_voice(
 
     speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
     
-    # Use the correct sub-modules from the new 'azure.speech' package
-    profile_client = speakersdk.VoiceProfileClient(speech_config)
+    # THE FIX: All classes are accessed via the main 'speechsdk' module
+    profile_client = speechsdk.VoiceProfileClient(speech_config)
 
     if not user.voice_profile_id:
         try:
-            profile_type = speakersdk.VoiceProfileType.TextIndependentIdentification
+            profile_type = speechsdk.VoiceProfileType.TextIndependentIdentification
             voice_profile = profile_client.create_profile(profile_type, "en-us")
             user.voice_profile_id = voice_profile.profile_id
             db.commit()
@@ -168,8 +166,8 @@ async def enroll_voice(
         wav_data = wav_bytes_io.getvalue()
         
         audio_stream_callback = WavStream(wav_data)
-        pull_stream = audiosdk.PullAudioInputStream(callback=audio_stream_callback)
-        audio_config = audiosdk.AudioConfig(stream=pull_stream)
+        pull_stream = speechsdk.audio.PullAudioInputStream(callback=audio_stream_callback)
+        audio_config = speechsdk.audio.AudioConfig(stream=pull_stream)
         
         print(f"Enrolling audio for profile ID: {user.voice_profile_id}...")
         result = profile_client.enroll_profile_async(user.voice_profile_id, audio_config).get()
@@ -178,7 +176,7 @@ async def enroll_voice(
             print(f"Successfully enrolled voice for user {user.email}. Remaining speech time: {result.remaining_enrollment_speech_time}")
             return {"status": "success", "profileId": user.voice_profile_id, "remainingTime": str(result.remaining_enrollment_speech_time)}
         elif result.reason == speechsdk.ResultReason.Canceled:
-            cancellation = speakersdk.VoiceProfileEnrollmentCancellationDetails.from_result(result)
+            cancellation = speechsdk.VoiceProfileEnrollmentCancellationDetails.from_result(result)
             raise HTTPException(status_code=400, detail=f"Enrollment canceled: {cancellation.reason} - {cancellation.error_details}")
         else:
             raise HTTPException(status_code=500, detail=f"Enrollment failed with reason: {result.reason}")
