@@ -17,6 +17,9 @@ class User(Base):
     role = Column(String)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    # --- NEW FIELD FOR VOICE PROFILE ---
+    voice_profile_id = Column(String, nullable=True, unique=True)
+
     # Relationship for Phase 2
     training_moments = relationship("TrainingQueue", back_populates="user")
 

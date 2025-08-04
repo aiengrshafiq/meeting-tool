@@ -12,6 +12,11 @@ from frontend.db import get_db, SessionLocal # Assuming frontend/db.py for now
 from backend.webhook import router as webhook_router
 from common.zoom_api import create_zoom_meeting, is_host_available, cancel_zoom_meeting
 
+
+from fastapi import UploadFile, File
+from models import User
+import azure.cognitiveservices.speech as speechsdk
+
 app = FastAPI()
 app.include_router(webhook_router)
 
@@ -106,3 +111,62 @@ def cancel_meeting(meeting_id: str, db: Session = Depends(get_db)):
         print(f"[❌ Cancel error] {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- NEW ROUTE FOR VOICE ENROLLMENT ---
+@app.post("/api/enroll-voice")
+async def enroll_voice(audio_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # For now, we'll assume a logged-in user with ID 1 for testing.
+    # In a real app, you would get this from the session.
+    user_id_to_enroll = 1 
+    user = db.query(User).filter(User.id == user_id_to_enroll).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    speech_key = os.getenv("SPEECH_KEY")
+    speech_region = os.getenv("SPEECH_REGION")
+    if not speech_key or not speech_region:
+        raise HTTPException(status_code=500, detail="Speech service not configured.")
+
+    speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+    profile_client = speechsdk.VoiceProfileClient(speech_config)
+
+    # Step 1: Create a voice profile for the user if they don't have one
+    if not user.voice_profile_id:
+        try:
+            # Create a permanent, text-independent profile
+            voice_profile = profile_client.create_profile(speechsdk.VoiceProfileType.TextIndependentIdentification, "en-us")
+            user.voice_profile_id = voice_profile.profile_id
+            db.commit()
+            print(f"Created new voice profile for user {user.email} with ID: {user.voice_profile_id}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to create voice profile: {e}")
+    
+    # Step 2: Enroll the audio against the profile
+    try:
+        audio_data = await audio_file.read()
+        
+        def audio_data_stream_callback():
+            yield audio_data
+            yield None # Signal end of stream
+
+        audio_config = speechsdk.audio.PullAudioInputStream(pull_stream_callback=audio_data_stream_callback)
+        
+        print(f"Enrolling audio for profile ID: {user.voice_profile_id}...")
+        result = profile_client.enroll_profile_async(user.voice_profile_id, audio_config).get()
+
+        if result.reason == speechsdk.ResultReason.EnrolledVoiceProfile:
+            print(f"Successfully enrolled voice for user {user.email}. Remaining enrollment speech time: {result.remaining_enrollment_speech_time}")
+            return {"status": "success", "profileId": user.voice_profile_id, "remainingTime": str(result.remaining_enrollment_speech_time)}
+        elif result.reason == speechsdk.ResultReason.Canceled:
+            cancellation = speechsdk.VoiceProfileEnrollmentCancellationDetails.from_result(result)
+            raise HTTPException(status_code=400, detail=f"Enrollment canceled: {cancellation.reason} - {cancellation.error_details}")
+        else:
+            raise HTTPException(status_code=500, detail=f"Enrollment failed with reason: {result.reason}")
+
+    except Exception as e:
+        # If enrollment fails, it's often better to delete the profile so they can start fresh
+        if user.voice_profile_id:
+            profile_client.delete_profile_async(user.voice_profile_id)
+            user.voice_profile_id = None
+            db.commit()
+        raise HTTPException(status_code=500, detail=f"An error occurred during enrollment: {e}")

@@ -1,0 +1,137 @@
+<!-- frontend/templates/voice_enrollment.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h2 class="card-title mb-3">Voice Profile Enrollment</h2>
+                    <p class="text-muted">To help the AI identify you in meetings, please record a short sample of your voice. Please read the following text clearly for about 30 seconds.</p>
+                    
+                    <div class="alert alert-secondary" role="alert">
+                        <p class="fst-italic">"The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. Success in this project requires not just technical skill, but also clear communication and a shared commitment to our goals. By aligning our efforts, we can overcome challenges and deliver exceptional results for our clients and stakeholders."</p>
+                    </div>
+
+                    <div id="controls" class="mt-4">
+                        <button id="startBtn" class="btn btn-lg btn-success">Start Recording</button>
+                        <button id="stopBtn" class="btn btn-lg btn-danger d-none">Stop Recording</button>
+                    </div>
+
+                    <div id="status" class="mt-3">
+                        <p class="lead">Status: <span id="statusText" class="fw-bold">Idle</span></p>
+                        <div class="progress d-none" style="height: 20px;">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+
+                    <div id="submission" class="mt-4 d-none">
+                        <audio id="audioPlayback" controls class="mb-3 w-100"></audio>
+                        <button id="submitBtn" class="btn btn-primary">Submit Voice Profile</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const statusText = document.getElementById('statusText');
+    const audioPlayback = document.getElementById('audioPlayback');
+    const submissionDiv = document.getElementById('submission');
+    const progressDiv = document.querySelector('.progress');
+    const progressBar = document.getElementById('progressBar');
+
+    let mediaRecorder;
+    let audioChunks = [];
+    let timer;
+
+    startBtn.addEventListener('click', async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                audioPlayback.src = audioUrl;
+                submissionDiv.classList.remove('d-none');
+            };
+
+            audioChunks = [];
+            mediaRecorder.start();
+            statusText.textContent = 'Recording...';
+            startBtn.classList.add('d-none');
+            stopBtn.classList.remove('d-none');
+            progressDiv.classList.remove('d-none');
+            
+            let seconds = 0;
+            timer = setInterval(() => {
+                seconds++;
+                let progress = Math.min((seconds / 30) * 100, 100);
+                progressBar.style.width = progress + '%';
+                progressBar.textContent = `${seconds}s`;
+                if (seconds >= 30) {
+                    stopBtn.click();
+                }
+            }, 1000);
+
+        } catch (err) {
+            console.error("Error accessing microphone:", err);
+            statusText.textContent = 'Error: Could not access microphone.';
+        }
+    });
+
+    stopBtn.addEventListener('click', () => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            clearInterval(timer);
+            statusText.textContent = 'Recording Finished. Review and Submit.';
+            stopBtn.classList.add('d-none');
+            startBtn.classList.remove('d-none');
+            startBtn.textContent = 'Record Again';
+        }
+    });
+
+    submitBtn.addEventListener('click', () => {
+        statusText.textContent = 'Submitting...';
+        submitBtn.disabled = true;
+
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const formData = new FormData();
+        formData.append('audio_file', audioBlob, 'enrollment.wav');
+
+        // This will be our new API endpoint
+        fetch('/api/enroll-voice', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.detail || 'Server error') });
+            }
+            return response.json();
+        })
+        .then(data => {
+            statusText.textContent = 'Enrollment Successful!';
+            alert('Your voice profile has been created successfully!');
+            // Optionally redirect or update UI
+        })
+        .catch(error => {
+            console.error('Error submitting voice profile:', error);
+            statusText.textContent = `Error: ${error.message}`;
+            alert(`Enrollment failed: ${error.message}`);
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+        });
+    });
+</script>
+{% endblock %}

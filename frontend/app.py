@@ -144,5 +144,11 @@ def brain_meeting_detail(meeting_id):
     finally:
         db.close()
 
+
+@app.route('/voice-enrollment')
+def voice_enrollment_page():
+    return render_template('voice_enrollment.html')
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
