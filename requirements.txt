@@ -11,7 +11,7 @@ authlib
 
 # Azure Storage
 azure-storage-blob
-azure-cognitiveservices-speech
+azure-cognitiveservices-speech==1.38.0
 
 # OpenAI
 openai
