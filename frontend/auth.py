@@ -68,7 +68,7 @@ def logout():
 def dashboard():
     if session.get("user_role") != "admin":
         flash("Access denied. Admins only.", "danger")
-        return redirect(url_for("app.home"))
+        return redirect(url_for("home"))
 
     db = SessionLocal()
     try:
@@ -78,7 +78,7 @@ def dashboard():
     except Exception as e:
         print(f"[❌ Error loading dashboard] {e}")
         flash("Failed to load dashboard.", "danger")
-        return redirect(url_for("app.home"))
+        return redirect(url_for("home"))
     finally:
         db.close()
 
@@ -86,7 +86,7 @@ def dashboard():
 def meetings():
     if session.get("user_role") != "admin":
         flash("Access denied. Admins only.", "danger")
-        return redirect(url_for("app.home"))
+        return redirect(url_for("home"))
 
     db = SessionLocal()
     try:
@@ -96,7 +96,7 @@ def meetings():
     except Exception as e:
         print(f"[❌ Error loading meetings] {e}")
         flash("Failed to load meetings.", "danger")
-        return redirect(url_for("app.home"))
+        return redirect(url_for("home"))
     finally:
         db.close()
 
@@ -104,12 +104,12 @@ def meetings():
 def cancel_meeting():
     if session.get("user_role") != "admin":
         flash("Unauthorized access", "danger")
-        return redirect(url_for("auth.meetings"))
+        return redirect(url_for("meetings"))
 
     meeting_id = request.form.get("meeting_id")
     if not meeting_id:
         flash("Missing meeting ID", "danger")
-        return redirect(url_for("auth.meetings"))
+        return redirect(url_for("meetings"))
 
     try:
         # This inter-service call to your own FastAPI backend is correct.
@@ -120,4 +120,4 @@ def cancel_meeting():
     except requests.exceptions.RequestException as e:
         flash(f"❌ Failed to cancel meeting: {str(e)}", "danger")
 
-    return redirect(url_for("auth.meetings"))
+    return redirect(url_for("meetings"))

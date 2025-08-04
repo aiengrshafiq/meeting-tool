@@ -33,7 +33,7 @@ def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
         payload = {
             "topic": meeting.topic, "type": 2, "start_time": meeting.start_time,
             "duration": meeting.duration, "agenda": meeting.agenda,
-            "settings": {"auto_recording": "cloud", "join_before_host": False, "waiting_room": True, "mute_upon_entry": True, "approval_type": 0, "registration_type": 1}
+            "settings": {"auto_recording": "cloud", "join_before_host": False, "waiting_room": True, "mute_upon_entry": True, "approval_type": 0, "registration_type": 1,"participant_video": True}
         }
         host_email = meeting.host_email.strip()
         if not host_email:
