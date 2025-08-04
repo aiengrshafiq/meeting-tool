@@ -7,6 +7,8 @@ from datetime import datetime
 
 # NEW IMPORT FOR PHASE 2 TRIGGER
 from azure.storage.blob import BlobServiceClient
+# NEW IMPORT TO HANDLE A COMMON WEBHOOK ISSUE
+from starlette.requests import ClientDisconnect
 
 # REFACTOR: Import models and db session
 from models import MeetingProcessingLog, MeetingLog
@@ -20,10 +22,8 @@ from common.emailer import send_summary_email
 router = APIRouter()
 
 ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET")
-# This will be used to trigger the Phase 2 function
 P2_STORAGE_CONN_STR = os.getenv("P2_STORAGE_CONNECTION_STRING")
 
-# This local file dependency is a point of failure in a scaled environment, but kept for now.
 def load_participants(meeting_id):
     path = Path(f"data/participants_{meeting_id}.json")
     if path.exists():
@@ -90,10 +90,9 @@ async def zoom_webhook(request: Request, db: Session = Depends(get_db)):
                 recipients.append(effective_host_email)
 
             for email in recipients:
-                # THE FIX: Added the missing 'to_name' argument.
                 send_summary_email(
                     to_email=email,
-                    to_name="Participant", # Using a generic but friendly name
+                    to_name="Participant",
                     subject=f"📝 Summary for Zoom Meeting {meeting_id}",
                     summary_text=summary,
                     transcript_text=transcript
@@ -113,7 +112,6 @@ async def zoom_webhook(request: Request, db: Session = Depends(get_db)):
             db.commit()
             print(f"[✅ Phase 1] DB records for {meeting_id} committed.")
 
-            # --- TRIGGER PHASE 2 ---
             if P2_STORAGE_CONN_STR:
                 try:
                     blob_service_client = BlobServiceClient.from_connection_string(P2_STORAGE_CONN_STR)
@@ -131,7 +129,12 @@ async def zoom_webhook(request: Request, db: Session = Depends(get_db)):
 
         return {"status": "processed", "meeting_id": meeting_id}
 
+    # THE FIX: Specifically catch the ClientDisconnect error and log it as a non-critical warning.
+    except ClientDisconnect:
+        print("[⚠️ Warning] Client disconnected before the full response could be sent. This is usually not a critical error.")
+        return {"status": "processed_but_client_disconnected"}
     except Exception as e:
         print(f"[❌ Top-level Error in Webhook] {e}")
         traceback.print_exc()
-        return {"error": str(e)}, 500
+        # Return a proper JSON response for errors
+        return JSONResponse(status_code=500, content={"error": str(e)})
