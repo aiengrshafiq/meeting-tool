@@ -1,4 +1,6 @@
 FROM python:3.11-slim
+# Add this line to install ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg
 
 WORKDIR /app
 

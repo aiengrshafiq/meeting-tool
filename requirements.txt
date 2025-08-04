@@ -23,6 +23,7 @@ httpx
 psycopg2-binary
 sqlalchemy
 alembic
+pydub
 
 # Tools & Utilities
 python-multipart

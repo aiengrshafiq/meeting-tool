@@ -67,6 +67,7 @@
             };
 
             mediaRecorder.onstop = () => {
+                audioPlayback.removeAttribute('src');
                 // THE FIX: Create a blob with the correct, more compatible type.
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 const audioUrl = URL.createObjectURL(audioBlob);

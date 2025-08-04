@@ -12,10 +12,15 @@ from frontend.db import get_db, SessionLocal # Assuming frontend/db.py for now
 from backend.webhook import router as webhook_router
 from common.zoom_api import create_zoom_meeting, is_host_available, cancel_zoom_meeting
 
+# --- NEW IMPORTS FOR AUDIO CONVERSION ---
+import io
+from pydub import AudioSegment
 
 from fastapi import UploadFile, File
 from models import User
 import azure.cognitiveservices.speech as speechsdk
+
+
 
 app = FastAPI()
 app.include_router(webhook_router)
@@ -112,11 +117,13 @@ def cancel_meeting(meeting_id: str, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- NEW ROUTE FOR VOICE ENROLLMENT ---
+# --- CORRECTED ROUTE FOR VOICE ENROLLMENT ---
 @app.post("/api/enroll-voice")
-async def enroll_voice(audio_file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def enroll_voice(
+    audio_file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
     # For now, we'll assume a logged-in user with ID 1 for testing.
-    # In a real app, you would get this from the session.
     user_id_to_enroll = 1 
     user = db.query(User).filter(User.id == user_id_to_enroll).first()
     if not user:
@@ -130,10 +137,8 @@ async def enroll_voice(audio_file: UploadFile = File(...), db: Session = Depends
     speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
     profile_client = speechsdk.VoiceProfileClient(speech_config)
 
-    # Step 1: Create a voice profile for the user if they don't have one
     if not user.voice_profile_id:
         try:
-            # Create a permanent, text-independent profile
             voice_profile = profile_client.create_profile(speechsdk.VoiceProfileType.TextIndependentIdentification, "en-us")
             user.voice_profile_id = voice_profile.profile_id
             db.commit()
@@ -141,13 +146,25 @@ async def enroll_voice(audio_file: UploadFile = File(...), db: Session = Depends
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create voice profile: {e}")
     
-    # Step 2: Enroll the audio against the profile
     try:
+        # --- START OF AUDIO CONVERSION ---
         audio_data = await audio_file.read()
         
+        # Load the uploaded webm audio data into pydub
+        webm_audio = AudioSegment.from_file(io.BytesIO(audio_data), format="webm")
+        
+        # Convert to the required format: 16kHz, 16-bit mono WAV
+        wav_audio = webm_audio.set_frame_rate(16000).set_sample_width(2).set_channels(1)
+        
+        # Export the converted audio to an in-memory WAV file
+        wav_bytes_io = io.BytesIO()
+        wav_audio.export(wav_bytes_io, format="wav")
+        wav_data = wav_bytes_io.getvalue()
+        # --- END OF AUDIO CONVERSION ---
+        
         def audio_data_stream_callback():
-            yield audio_data
-            yield None # Signal end of stream
+            yield wav_data
+            yield None
 
         audio_config = speechsdk.audio.PullAudioInputStream(pull_stream_callback=audio_data_stream_callback)
         
@@ -155,7 +172,7 @@ async def enroll_voice(audio_file: UploadFile = File(...), db: Session = Depends
         result = profile_client.enroll_profile_async(user.voice_profile_id, audio_config).get()
 
         if result.reason == speechsdk.ResultReason.EnrolledVoiceProfile:
-            print(f"Successfully enrolled voice for user {user.email}. Remaining enrollment speech time: {result.remaining_enrollment_speech_time}")
+            print(f"Successfully enrolled voice for user {user.email}. Remaining speech time: {result.remaining_enrollment_speech_time}")
             return {"status": "success", "profileId": user.voice_profile_id, "remainingTime": str(result.remaining_enrollment_speech_time)}
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation = speechsdk.VoiceProfileEnrollmentCancellationDetails.from_result(result)
@@ -164,9 +181,7 @@ async def enroll_voice(audio_file: UploadFile = File(...), db: Session = Depends
             raise HTTPException(status_code=500, detail=f"Enrollment failed with reason: {result.reason}")
 
     except Exception as e:
-        # If enrollment fails, it's often better to delete the profile so they can start fresh
-        if user.voice_profile_id:
-            profile_client.delete_profile_async(user.voice_profile_id)
-            user.voice_profile_id = None
-            db.commit()
+        print(f"An error occurred during enrollment processing: {e}")
+        traceback.print_exc()
+        # It's safer not to delete the profile here, as the error might be temporary
         raise HTTPException(status_code=500, detail=f"An error occurred during enrollment: {e}")
