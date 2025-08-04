@@ -30,9 +30,9 @@ jobs:
         id: set-tag
         run: echo "TAG=build-$(date +%s)" >> $GITHUB_ENV
 
-      - name: 🏗️ Build and Push Docker image
+      - name: 🏗️ Build and Push Docker image (with no-cache)
         run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/$IMAGE_NAME:$TAG .
+          docker build --no-cache -t ${{ secrets.ACR_LOGIN_SERVER }}/$IMAGE_NAME:$TAG .
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/$IMAGE_NAME:$TAG
 
       - name: 🔐 Azure Login
