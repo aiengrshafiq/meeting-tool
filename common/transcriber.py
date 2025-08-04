@@ -13,44 +13,29 @@ def transcribe_from_blob_url(blob_url):
         response = requests.get(blob_url)
         response.raise_for_status()
 
+        # Use a temporary file to save the audio content
         with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as tmp:
             tmp.write(response.content)
-            tmp.flush()
-            
-            print(f"[🎙️ Transcribing with Speaker Diarization] {tmp.name}")
-            with open(tmp.name, "rb") as audio_file:
-                # THE FIX: Change response format and enable speaker labels
-                transcript_response = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="verbose_json", # Get detailed data
-                    timestamp_granularities=["word"],
-                    diarize=True # Enable speaker identification
-                )
-
-        # Process the structured response into a readable format
-        full_transcript = ""
-        if transcript_response.words:
-            current_speaker = None
-            for word in transcript_response.words:
-                speaker_label = f"Speaker {word.speaker}"
-                if current_speaker != speaker_label:
-                    full_transcript += f"\n\n**{speaker_label}:**"
-                    current_speaker = speaker_label
-                full_transcript += f" {word.word}"
-        else:
-            # Fallback for older models or if diarization fails
-            full_transcript = transcript_response.text
+            tmp_path = tmp.name
+        
+        print(f"[🎙️ Transcribing] {tmp_path}")
+        with open(tmp_path, "rb") as audio_file:
+            # THE FIX: Removed the 'diarize' and related arguments not supported by this API.
+            transcript_response = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                response_format="text"
+            )
 
         print("[✅ Transcription complete]")
-        return full_transcript.strip()
+        return transcript_response
 
     except Exception as e:
         print(f"[❌ Error] Transcription failed: {str(e)}")
-        # Print the full traceback for better debugging
         import traceback
         traceback.print_exc()
         return f"Transcription failed: {e}"
     finally:
-        if 'tmp' in locals() and os.path.exists(tmp.name):
-            os.remove(tmp.name)
+        # Ensure the temporary file is always cleaned up
+        if 'tmp_path' in locals() and os.path.exists(tmp_path):
+            os.remove(tmp_path)
