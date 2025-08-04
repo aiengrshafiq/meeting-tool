@@ -11,7 +11,7 @@ authlib
 
 # Azure Storage
 azure-storage-blob
-azure-speech
+azure-speech==1.34.0
 
 # OpenAI
 openai
