@@ -1,30 +1,31 @@
 # backend/api.py
-from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException, Depends
-from sqlalchemy.orm import Session
-import os, json, traceback
+
+# --- Standard Library Imports ---
+import os
+import json
+import traceback
 from pathlib import Path
 from datetime import datetime
+import io
 
-# REFACTOR: Import ORM models and db session management
-from models import ScheduledMeeting
-from frontend.db import get_db, SessionLocal # Assuming frontend/db.py for now
+# --- Third-party Imports ---
+from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
+from sqlalchemy.orm import Session
+from pydub import AudioSegment
+import azure.cognitiveservices.speech as speechsdk
+
+# --- Local Application Imports ---
+from models import ScheduledMeeting, User
+from frontend.db import get_db
 from backend.webhook import router as webhook_router
 from common.zoom_api import create_zoom_meeting, is_host_available, cancel_zoom_meeting
 
-# --- NEW IMPORTS FOR AUDIO CONVERSION ---
-import io
-from pydub import AudioSegment
-
-from fastapi import UploadFile, File
-from models import User
-import azure.cognitiveservices.speech as speechsdk
-
-
-
+# --- FastAPI App Initialization ---
 app = FastAPI()
 app.include_router(webhook_router)
 
+# --- Pydantic Models ---
 class MeetingRequest(BaseModel):
     topic: str
     start_time: str
@@ -33,6 +34,21 @@ class MeetingRequest(BaseModel):
     participants: list[str]
     host_email: str
     created_by_email: str
+
+# --- Helper class for Azure Speech SDK ---
+class WavStream(speechsdk.audio.PullAudioInputStreamCallback):
+    def __init__(self, wav_bytes: bytes):
+        super().__init__()
+        self._buffer = io.BytesIO(wav_bytes)
+
+    def read(self, buffer: memoryview) -> int:
+        size = self._buffer.readinto(buffer)
+        return size
+
+    def close(self):
+        self._buffer.close()
+
+# --- API Routes ---
 
 @app.get("/api/test")
 async def test():
@@ -46,25 +62,18 @@ def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
             "duration": meeting.duration, "agenda": meeting.agenda,
             "settings": {"auto_recording": "cloud", "join_before_host": False, "waiting_room": True, "mute_upon_entry": True, "approval_type": 0, "registration_type": 1}
         }
-
-        # 🔒 Validate host selection
         host_email = meeting.host_email.strip()
         if not host_email:
             raise HTTPException(status_code=400, detail="Please select a valid host email.")
-        
-        # REFACTOR: Pass the db session to the availability check
         if not is_host_available(db, host_email, meeting.start_time, meeting.duration):
             raise HTTPException(
-                status_code=409, # 409 Conflict is more appropriate
+                status_code=409,
                 detail=f"Requested host '{host_email}' is busy. Please select another host or time."
             )
-
-        # 🎯 Create Zoom meeting
         result = create_zoom_meeting(payload, host_email)
         if not result or "id" not in result:
             raise HTTPException(status_code=500, detail="Failed to create Zoom meeting.")
-
-        # 🗂️ REFACTOR: Save scheduled meeting using SQLAlchemy
+        
         new_meeting = ScheduledMeeting(
             meeting_id=result["id"],
             topic=meeting.topic,
@@ -77,8 +86,7 @@ def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
         )
         db.add(new_meeting)
         db.commit()
-
-        # 💾 Save participants (This file-based approach is fragile but kept as per original code)
+        
         os.makedirs("data", exist_ok=True)
         participants_path = Path(f"data/participants_{result['id']}.json")
         with open(participants_path, "w") as f:
@@ -87,7 +95,7 @@ def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
                 "created_by_email": meeting.created_by_email,
                 "form_host_email": host_email
             }, f)
-
+            
         return {
             "id": result["id"], "join_url": result["join_url"], "start_url": result["start_url"],
             "start_time": result["start_time"], "duration": result["duration"],
@@ -104,26 +112,22 @@ def create_meeting(meeting: MeetingRequest, db: Session = Depends(get_db)):
 def cancel_meeting(meeting_id: str, db: Session = Depends(get_db)):
     try:
         cancel_zoom_meeting(meeting_id)
-        
-        # REFACTOR: Delete from DB using SQLAlchemy
         meeting_to_delete = db.query(ScheduledMeeting).filter(ScheduledMeeting.meeting_id == meeting_id).first()
         if meeting_to_delete:
             db.delete(meeting_to_delete)
             db.commit()
-            
         return {"status": "cancelled"}
     except Exception as e:
         print(f"[❌ Cancel error] {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- CORRECTED ROUTE FOR VOICE ENROLLMENT ---
 @app.post("/api/enroll-voice")
 async def enroll_voice(
     audio_file: UploadFile = File(...), 
     db: Session = Depends(get_db)
 ):
-    # For now, we'll assume a logged-in user with ID 1 for testing.
+    # This is a placeholder for a real user session
     user_id_to_enroll = 1 
     user = db.query(User).filter(User.id == user_id_to_enroll).first()
     if not user:
@@ -147,26 +151,17 @@ async def enroll_voice(
             raise HTTPException(status_code=500, detail=f"Failed to create voice profile: {e}")
     
     try:
-        # --- START OF AUDIO CONVERSION ---
         audio_data = await audio_file.read()
-        
-        # Load the uploaded webm audio data into pydub
         webm_audio = AudioSegment.from_file(io.BytesIO(audio_data), format="webm")
-        
-        # Convert to the required format: 16kHz, 16-bit mono WAV
         wav_audio = webm_audio.set_frame_rate(16000).set_sample_width(2).set_channels(1)
         
-        # Export the converted audio to an in-memory WAV file
         wav_bytes_io = io.BytesIO()
         wav_audio.export(wav_bytes_io, format="wav")
         wav_data = wav_bytes_io.getvalue()
-        # --- END OF AUDIO CONVERSION ---
         
-        def audio_data_stream_callback():
-            yield wav_data
-            yield None
-
-        audio_config = speechsdk.audio.PullAudioInputStream(pull_stream_callback=audio_data_stream_callback)
+        audio_stream_callback = WavStream(wav_data)
+        pull_stream = speechsdk.audio.PullAudioInputStream(stream=audio_stream_callback)
+        audio_config = speechsdk.audio.AudioConfig(stream=pull_stream)
         
         print(f"Enrolling audio for profile ID: {user.voice_profile_id}...")
         result = profile_client.enroll_profile_async(user.voice_profile_id, audio_config).get()
@@ -183,5 +178,4 @@ async def enroll_voice(
     except Exception as e:
         print(f"An error occurred during enrollment processing: {e}")
         traceback.print_exc()
-        # It's safer not to delete the profile here, as the error might be temporary
         raise HTTPException(status_code=500, detail=f"An error occurred during enrollment: {e}")
