@@ -52,14 +52,23 @@
     startBtn.addEventListener('click', async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
+            
+            // THE FIX: Use a more compatible MIME type. 'audio/webm' is widely supported.
+            const options = { mimeType: 'audio/webm;codecs=opus' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                console.warn(`${options.mimeType} is not supported, falling back to default.`);
+                mediaRecorder = new MediaRecorder(stream);
+            } else {
+                mediaRecorder = new MediaRecorder(stream, options);
+            }
 
             mediaRecorder.ondataavailable = event => {
                 audioChunks.push(event.data);
             };
 
             mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                // THE FIX: Create a blob with the correct, more compatible type.
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 const audioUrl = URL.createObjectURL(audioBlob);
                 audioPlayback.src = audioUrl;
                 submissionDiv.classList.remove('d-none');
@@ -73,6 +82,9 @@
             progressDiv.classList.remove('d-none');
             
             let seconds = 0;
+            progressBar.style.width = '0%';
+            progressBar.textContent = '';
+
             timer = setInterval(() => {
                 seconds++;
                 let progress = Math.min((seconds / 30) * 100, 100);
@@ -104,11 +116,11 @@
         statusText.textContent = 'Submitting...';
         submitBtn.disabled = true;
 
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        // THE FIX: Use the correct blob type and filename extension.
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
         const formData = new FormData();
-        formData.append('audio_file', audioBlob, 'enrollment.wav');
+        formData.append('audio_file', audioBlob, 'enrollment.webm');
 
-        // This will be our new API endpoint
         fetch('/api/enroll-voice', {
             method: 'POST',
             body: formData
@@ -121,13 +133,20 @@
         })
         .then(data => {
             statusText.textContent = 'Enrollment Successful!';
-            alert('Your voice profile has been created successfully!');
-            // Optionally redirect or update UI
+            // Using a more user-friendly confirmation than alert()
+            const successAlert = document.createElement('div');
+            successAlert.className = 'alert alert-success mt-3';
+            successAlert.textContent = 'Your voice profile has been created successfully!';
+            submissionDiv.appendChild(successAlert);
+            submitBtn.classList.add('d-none');
         })
         .catch(error => {
             console.error('Error submitting voice profile:', error);
             statusText.textContent = `Error: ${error.message}`;
-            alert(`Enrollment failed: ${error.message}`);
+             const errorAlert = document.createElement('div');
+            errorAlert.className = 'alert alert-danger mt-3';
+            errorAlert.textContent = `Enrollment failed: ${error.message}`;
+            submissionDiv.appendChild(errorAlert);
         })
         .finally(() => {
             submitBtn.disabled = false;
