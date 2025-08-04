@@ -1,24 +1,32 @@
 FROM python:3.11-slim
-# Add this line to install ffmpeg
-RUN apt-get update && apt-get install -y ffmpeg
 
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y \
+# 1. Install all system dependencies first, including ffmpeg
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     nginx \
     supervisor \
     bash \
     curl \
-    git && \
-    rm -rf /var/lib/apt/lists/*
+    git \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+
+# 2. Copy and install Python requirements in a separate layer
+# This improves Docker caching. The layer only rebuilds if requirements.txt changes.
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
+# 3. Add a verification step to ensure the correct library is installed
+# This command will cause the build to FAIL if VoiceProfileClient is not found.
+RUN python -c "import azure.cognitiveservices.speech as speechsdk; assert hasattr(speechsdk, 'VoiceProfileClient'), 'CRITICAL ERROR: VoiceProfileClient not found in installed SDK. Build failed.'"
+
+# 4. Now copy the rest of the application code
 COPY . .
 
-# Copy nginx and supervisor config properly
+# Copy nginx and supervisor configs
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
