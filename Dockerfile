@@ -1,25 +1,20 @@
-# THE FIX: Use the full Python image, not the slim version, to include necessary system libraries.
-FROM python:3.11
+FROM python:3.11-slim
 
-# Install system dependencies including ffmpeg
+WORKDIR /app
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     nginx \
     supervisor \
-    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-# Copy and install Python requirements. Using --no-cache-dir is still a good practice.
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Now copy the rest of the application code
 COPY . .
 
-# Copy nginx and supervisor configs
+# Copy nginx and supervisor config properly
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 

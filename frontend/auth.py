@@ -55,7 +55,7 @@ def login():
         session["user_email"] = user.email
         session["user_role"] = user.role
         flash("✅ Logged in successfully", "success")
-        return redirect(url_for("app.home")) # Redirect to the main app blueprint home
+        return redirect(url_for("home"))
     return render_template("login.html")
 
 @auth_bp.route("/logout")
