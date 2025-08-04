@@ -20,8 +20,10 @@ from common.emailer import send_summary_email
 router = APIRouter()
 
 ZOOM_WEBHOOK_SECRET = os.getenv("ZOOM_WEBHOOK_SECRET")
+# This will be used to trigger the Phase 2 function
+P2_STORAGE_CONN_STR = os.getenv("P2_STORAGE_CONNECTION_STRING")
 
-# This local file dependency is a point of failure, but kept for now.
+# This local file dependency is a point of failure in a scaled environment, but kept for now.
 def load_participants(meeting_id):
     path = Path(f"data/participants_{meeting_id}.json")
     if path.exists():
@@ -75,7 +77,6 @@ async def zoom_webhook(request: Request, db: Session = Depends(get_db)):
                     async for chunk in r.aiter_bytes():
                         tmp.write(chunk)
             
-            # This uploads the AUDIO to the PHASE 1 storage
             blob_url = upload_file_to_blob(meeting_id, tmp.name, filename) 
             
             transcript = transcribe_from_blob_url(blob_url)
@@ -84,14 +85,18 @@ async def zoom_webhook(request: Request, db: Session = Depends(get_db)):
             
             effective_host_email = form_host_email or recording.get("host_email")
             if not recipients:
-                recipients = [effective_host_email]
-            if effective_host_email not in recipients:
+                recipients = [effective_host_email] if effective_host_email else []
+            if effective_host_email and effective_host_email not in recipients:
                 recipients.append(effective_host_email)
 
             for email in recipients:
+                # THE FIX: Added the missing 'to_name' argument.
                 send_summary_email(
-                    to_email=email, subject=f"📝 Summary for Zoom Meeting {meeting_id}",
-                    summary_text=summary, transcript_text=transcript
+                    to_email=email,
+                    to_name="Participant", # Using a generic but friendly name
+                    subject=f"📝 Summary for Zoom Meeting {meeting_id}",
+                    summary_text=summary,
+                    transcript_text=transcript
                 )
 
             new_log = MeetingLog(
@@ -109,20 +114,17 @@ async def zoom_webhook(request: Request, db: Session = Depends(get_db)):
             print(f"[✅ Phase 1] DB records for {meeting_id} committed.")
 
             # --- TRIGGER PHASE 2 ---
-            # Now, upload the final transcript to the Phase 2 storage to trigger the Brain
-            try:
-                p2_storage_conn_str = os.getenv("P2_STORAGE_CONNECTION_STRING")
-                if p2_storage_conn_str:
-                    blob_service_client = BlobServiceClient.from_connection_string(p2_storage_conn_str)
-                    # The path will be the unique Zoom ID, e.g., "88387737580/transcript.txt"
+            if P2_STORAGE_CONN_STR:
+                try:
+                    blob_service_client = BlobServiceClient.from_connection_string(P2_STORAGE_CONN_STR)
                     blob_path = f"{meeting_id}/transcript.txt"
                     blob_client = blob_service_client.get_blob_client(container="raw-transcripts-phase2", blob=blob_path)
                     blob_client.upload_blob(transcript.encode('utf-8'), overwrite=True)
                     print(f"[✅ Phase 2 Trigger] Uploaded transcript to '{blob_path}' to start intelligence processing.")
-                else:
-                    print("[⚠️ Phase 2 Trigger] P2_STORAGE_CONNECTION_STRING not set. Skipping trigger.")
-            except Exception as e:
-                print(f"[❌ Phase 2 Trigger] Blob Upload Error: {e}")
+                except Exception as e:
+                    print(f"[❌ Phase 2 Trigger] Blob Upload Error: {e}")
+            else:
+                print("[⚠️ Phase 2 Trigger] P2_STORAGE_CONNECTION_STRING not set. Skipping trigger.")
         finally:
             tmp.close()
             os.remove(tmp.name)
