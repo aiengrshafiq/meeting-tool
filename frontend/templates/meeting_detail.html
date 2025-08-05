@@ -1,22 +1,20 @@
-<!-- frontend/templates/meeting_detail.html -->
 {% extends "base.html" %}
+{% block title %}Meeting Details{% endblock %}
 {% block content %}
 <div class="container mt-4">
     <a href="{{ url_for('brain_dashboard') }}" class="btn btn-outline-secondary mb-3">
-        &larr; Back to Dashboard
+        <i class="fas fa-arrow-left me-2"></i>Back to Neural Brain
     </a>
 
-    <h1 class="mb-3">Meeting Details: {{ details.meetingId }}</h1>
-    
-    <!-- THE FIX: This line now uses correct syntax to format the date string -->
-    <p class="text-muted">Processed on: {{ details.dateTime.split('.')[0].replace('T', ' ') }} UTC</p>
+    <h1 class="mb-1">Meeting Details</h1>
+    <p class="text-muted mb-4">ID: {{ details.meetingId }} | Processed on: {{ details.dateTime.split('.')[0].replace('T', ' ') }} UTC</p>
 
     <div class="row">
         <!-- Left Column: Classification & Metadata -->
-        <div class="col-md-4">
+        <div class="col-lg-4">
             <div class="card shadow-sm mb-4">
-                <div class="card-header">
-                    <h5>Classification</h5>
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-sitemap me-2"></i>Classification</h5>
                 </div>
                 <ul class="list-group list-group-flush">
                     <li class="list-group-item"><strong>Subsidiary:</strong> {{ details.classification.subsidiary }}</li>
@@ -27,8 +25,8 @@
             </div>
 
             <div class="card shadow-sm mb-4">
-                <div class="card-header">
-                    <h5>Participants</h5>
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-users me-2"></i>Participants</h5>
                 </div>
                 <ul class="list-group list-group-flush">
                     {% for participant in details.participants %}
@@ -38,37 +36,65 @@
             </div>
         </div>
 
-        <!-- Right Column: Decisions & Tags -->
-        <div class="col-md-8">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header">
-                    <h5>Key Decisions</h5>
+        <!-- Right Column: Decisions, Tags, Summary, Transcript -->
+        <div class="col-lg-8">
+             <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-gavel me-2"></i>Key Decisions</h5>
                 </div>
                 <div class="card-body">
                     {% if details.classification.key_decisions %}
-                        <ul>
+                        <ul class="mb-0">
                         {% for decision in details.classification.key_decisions %}
                             <li>{{ decision }}</li>
                         {% endfor %}
                         </ul>
                     {% else %}
-                        <p class="text-muted">No key decisions were identified.</p>
+                        <p class="text-muted mb-0">No key decisions were identified.</p>
                     {% endif %}
                 </div>
             </div>
 
             <div class="card shadow-sm mb-4">
-                <div class="card-header">
-                    <h5>Tags</h5>
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-tags me-2"></i>Tags</h5>
                 </div>
                 <div class="card-body">
                     {% if details.classification.tags %}
                         {% for tag in details.classification.tags %}
-                            <span class="badge bg-primary fs-6 me-2 mb-2">{{ tag }}</span>
+                            <span class="badge bg-primary fs-6 me-2 mb-2 p-2">{{ tag }}</span>
                         {% endfor %}
                     {% else %}
-                        <p class="text-muted">No tags were identified.</p>
+                        <p class="text-muted mb-0">No tags were identified.</p>
                     {% endif %}
+                </div>
+            </div>
+            
+            <!-- NEW: Tabs for Summary and Transcript -->
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <ul class="nav nav-tabs card-header-tabs" id="myTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" type="button" role="tab">
+                                <i class="fas fa-file-alt me-2"></i>Summary
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="transcript-tab" data-bs-toggle="tab" data-bs-target="#transcript" type="button" role="tab">
+                                <i class="fas fa-comment-dots me-2"></i>Full Transcript
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content" id="myTabContent">
+                        <div class="tab-pane fade show active" id="summary" role="tabpanel">
+                            <pre style="white-space: pre-wrap; font-family: inherit;">{{ meeting_log.summary }}</pre>
+                        </div>
+                        <div class="tab-pane fade" id="transcript" role="tabpanel">
+                            <pre style="white-space: pre-wrap; font-family: inherit;">{{ meeting_log.transcript }}</pre>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

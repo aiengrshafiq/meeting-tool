@@ -1,54 +1,61 @@
-<!-- frontend/templates/brain_dashboard.html -->
 {% extends "base.html" %}
+{% block title %}Neural Brain{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <h1 class="mb-4">Strategic Meeting Intelligence Brain</h1>
-    
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <h5 class="card-title">Processed Meetings</h5>
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Meeting Time</th>
-                            <th>Subsidiary</th>
-                            <th>Department</th>
-                            <th>Type</th>
-                            <th>Tags</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for meeting in meetings %}
-                        <tr>
-                            <td>{{ meeting.meeting_time.strftime('%Y-%m-%d %H:%M') if meeting.meeting_time else 'N/A' }}</td>
-                            <td>{{ meeting.subsidiary or 'N/A' }}</td>
-                            <td>{{ meeting.department or 'N/A' }}</td>
-                            <td>{{ meeting.meeting_type or 'N/A' }} / {{ meeting.meeting_subtype or 'N/A' }}</td>
-                            <td>
-                                {% if meeting.tags %}
-                                    {% for tag in meeting.tags %}
-                                        <span class="badge bg-secondary me-1">{{ tag }}</span>
-                                    {% endfor %}
-                                {% else %}
-                                    <span class="badge bg-light text-dark">No Tags</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <!-- THE FIX: This now links to the detail page -->
-                                
-                                <a href="{{ url_for('brain_meeting_detail', meeting_id=meeting.meeting_id) }}" class="btn btn-sm btn-outline-primary">View Details</a>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" class="text-center">No processed meetings found.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="mb-0">Neural Brain</h1>
+        <p class="text-muted">AI-Processed Meeting Insights</p>
+    </div>
+    <a href="{{ url_for('home') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-tachometer-alt me-2"></i>Back to Main Dashboard
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr class="table-light">
+                        <th>Meeting Time</th>
+                        <th>Subsidiary</th>
+                        <th>Department</th>
+                        <th>Type</th>
+                        <th>Tags</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for meeting in meetings %}
+                    <tr>
+                        <td>{{ meeting.meeting_time.strftime('%Y-%m-%d %H:%M') if meeting.meeting_time else 'N/A' }}</td>
+                        <td>{{ meeting.subsidiary or 'N/A' }}</td>
+                        <td>{{ meeting.department or 'N/A' }}</td>
+                        <td>{{ meeting.meeting_type or 'N/A' }}</td>
+                        <td>
+                            {% if meeting.tags %}
+                                {% for tag in meeting.tags %}
+                                    <span class="badge bg-secondary me-1">{{ tag }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="badge bg-light text-dark">No Tags</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{{ url_for('brain_meeting_detail', meeting_id=meeting.meeting_id) }}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-search me-1"></i>View Details
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-4">
+                            <p class="text-muted mb-0">No processed meetings found.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 </div>

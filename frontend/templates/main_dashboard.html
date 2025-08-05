@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Main Dashboard{% endblock %}
+{% block content %}
+<div class="text-center mb-5">
+    <h1>Welcome to the Meeting Intelligence OS</h1>
+    <p class="lead text-muted">Your central hub for scheduling meetings and accessing AI-powered insights.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body d-flex flex-column text-center">
+                <div class="mb-3">
+                    <i class="fas fa-brain fa-3x text-primary"></i>
+                </div>
+                <h4 class="card-title">Neural Brain</h4>
+                <p class="card-text text-muted">Access AI-driven classifications, tags, and semantic search for all processed meetings.</p>
+                <div class="mt-auto">
+                    <a href="{{ url_for('brain_dashboard') }}" class="btn btn-primary">
+                        <i class="fas fa-arrow-right me-2"></i>Explore Insights
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body d-flex flex-column text-center">
+                <div class="mb-3">
+                    <i class="fas fa-calendar-plus fa-3x text-success"></i>
+                </div>
+                <h4 class="card-title">Schedule New Meeting</h4>
+                <p class="card-text text-muted">Book a new Zoom meeting with automatic cloud recording and processing.</p>
+                <div class="mt-auto">
+                    <a href="{{ url_for('create_meeting_form') }}" class="btn btn-success">
+                        <i class="fas fa-plus me-2"></i>Create Meeting
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if session.get("user_role") == "admin" %}
+<hr class="my-5">
+<h3 class="text-center mb-4 text-muted">Administrative Views</h3>
+<div class="row g-4 justify-content-center">
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body d-flex flex-column text-center">
+                <div class="mb-3">
+                    <i class="fas fa-calendar-alt fa-3x text-info"></i>
+                </div>
+                <h4 class="card-title">Scheduled Meetings</h4>
+                <p class="card-text text-muted">View and manage all upcoming meetings that have been scheduled.</p>
+                <div class="mt-auto">
+                    <a href="{{ url_for('auth.meetings') }}" class="btn btn-info">
+                        <i class="fas fa-eye me-2"></i>View Scheduled
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body d-flex flex-column text-center">
+                 <div class="mb-3">
+                    <i class="fas fa-history fa-3x text-warning"></i>
+                </div>
+                <h4 class="card-title">Legacy Dashboard</h4>
+                <p class="card-text text-muted">Access the original dashboard view of all processed meeting logs.</p>
+                <div class="mt-auto">
+                    <a href="{{ url_for('auth.dashboard') }}" class="btn btn-warning">
+                        <i class="fas fa-tachometer-alt me-2"></i>View Legacy
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
