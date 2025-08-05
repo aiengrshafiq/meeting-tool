@@ -28,6 +28,11 @@ from datetime import datetime, timedelta
 
 app.register_blueprint(auth_bp)
 
+# THE FIX: Make the current year available to all templates
+@app.context_processor
+def inject_current_year():
+    return {'current_year': datetime.utcnow().year}
+
 @app.before_request
 def require_login():
     if request.endpoint and 'static' not in request.endpoint and not session.get("user_id"):
