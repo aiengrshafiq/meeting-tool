@@ -20,11 +20,12 @@ def transcribe_from_blob_url(blob_url):
         
         print(f"[🎙️ Transcribing] {tmp_path}")
         with open(tmp_path, "rb") as audio_file:
-            # THE FIX: Removed the 'diarize' and related arguments not supported by this API.
+            # THE FIX: Explicitly tell the model the language is English.
             transcript_response = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file,
-                response_format="text"
+                response_format="text",
+                language="en"  # <-- THIS IS THE CRITICAL FIX
             )
 
         print("[✅ Transcription complete]")
